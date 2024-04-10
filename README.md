@@ -15,9 +15,9 @@ This project is still in progress, all datasets currently published will see a m
 - [~] public repository for builder scripts
 - [ ] (self-)publish TaCoS 2023 paper. 
 - [ ] redo structure
-- [ ] add thumbnails (text2img?)
+- [~] add thumbnails (text2img?)
 - [ ] improved license detecting and tagging using `scan-code` 
-- [ ] **potentially** webscraping and tagging sources/unlisted?
+- [ ] **potentially** webscraping and tagging sources/unlisted? -> current RFC: https://github.com/pygfx/shadertoy/pull/27
 
 
 ## Related work
