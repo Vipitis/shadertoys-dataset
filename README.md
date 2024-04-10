@@ -14,7 +14,7 @@ This project is still in progress, all datasets currently published will see a m
 - [ ] dynamically split train/test based on shaderID hash
 - [~] public repository for builder scripts
 - [ ] (self-)publish TaCoS 2023 paper. 
-- [ ] redo structure
+- [~] redo structure
 - [~] add thumbnails (text2img?)
 - [ ] improved license detecting and tagging using `scan-code` 
 - [ ] **potentially** webscraping and tagging sources/unlisted? -> current RFC: https://github.com/pygfx/shadertoy/pull/27
@@ -37,6 +37,28 @@ To access shader programs that are published for `public+api` a Shadertoy accoun
 * For license detection [scancode-toolkit](https://github.com/nexB/scancode-toolkit) is used.
 
 * For testing shaders [wgpu-shadertoy](https://github.com/pygfx/shadertoy) is used.
+
+
+## Usage
+
+There is currently two out of three scripts available. Plenty of defaults are set and example files are provided in `./data/`
+
+### Download
+```shell
+$>download.py --mode full --num_shaders 100
+```
+will download the newest 100 shaders from Shadertoy.com via the API and save them to the `./data/raw/` directory as a .jsonl file.
+
+see `download.py --help` for more options. Or look at the [source](./download.py)
+
+### Annotate
+```shell
+$>annotate.py 
+```
+this flattens the nested renderpasses into a single dict and adds relevant information like licenses
+
+### Upload (missing)
+scripts to build train/test split and upload them to Huggingface aren't written yet.
 
 
 ## License note

@@ -36,7 +36,7 @@ argument_parser.add_argument(
 argument_parser.add_argument(
     "--num_shaders",
     type=int,
-    default=10,
+    default=None,
     help="Number of shaders to download, overwritten if ids is provided",
 )
 
@@ -60,7 +60,10 @@ def get_shader(shader_id) -> dict:
         raise requests.exceptions.HTTPError(
             f"Failed to load shader {shader_id} with status code {response.status_code}"
         )
-    return response.json()
+    shader_data = response.json()
+    if "Error" in shader_data:
+        raise ValueError(f"Failed to load shader {shader_id}: {shader_data['Error']}") #TODO: consider scraping here: https://github.com/pygfx/shadertoy/pull/27
+    return shader_data
 
 
 def append_shaders(output_path, shaders: list[dict]) -> None:
@@ -87,9 +90,18 @@ def update_shaders(output_path, shaders: list[dict]) -> None:
 
 
 def read_ids(ids_path):
-    with open(ids_path, "r") as f:
+    with open(ids_path, "r", encoding="utf-8") as f:
         return f.read().splitlines()
-
+    
+def extract_id(id_or_url):
+    """
+    Helper function to extract jus the id, even if urls are given.
+    """
+    if "/" in id_or_url:
+        shader_id = id_or_url.rstrip("/").split("/")[-1]
+    else:
+        shader_id = id_or_url
+    return shader_id
 
 if __name__ == "__main__":
     args = argument_parser.parse_args()
@@ -101,7 +113,10 @@ if __name__ == "__main__":
         else:
             shader_ids = args.ids.split(" ")
         # overwrite num_shaders here as well?
+    shader_ids = [extract_id(id) for id in shader_ids]
 
+    if args.num_shaders is not None:
+        shader_ids = shader_ids[:args.num_shaders]
     num_ids = len(shader_ids)
     if num_ids > 1000:
         raise NotImplementedError("Chunking not yet implemented")

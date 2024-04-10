@@ -2,8 +2,12 @@ import json
 import jsonlines
 import os
 import datetime
-import tree_sitter  # do we want this here
+import tree_sitter  # do we want this here -> annotate function byte-indecies?
 import argparse
+import tqdm
+
+from licensedcode.detection import detect_licenses
+
 
 from wgpu_shadertoy import Shadertoy
 
@@ -22,7 +26,7 @@ def annotate(shader_data: dict, access: str="api") -> dict:
     if "Shader" in shader_data:
         shader_data = shader_data["Shader"]
     out_dict = flatten_shader_data(shader_data)
-    out_dict["license"] = detect_license(shader_data)
+    out_dict["license"] = classify_license(out_dict["image_code"])
     out_dict["thumbnail"] = (
         f"https://www.shadertoy.com/media/shaders/{shader_data['info']['id']}.jpg"
     )
@@ -71,11 +75,15 @@ def flatten_shader_data(shader_data: dict) -> dict:
     return out_dict
 
 
-def detect_license(shader_data) -> str:
+def classify_license(code: str) -> str:
     """
-    Function to detect the license of a shader using ScanCode.
+    Returns the spdx license identifier, if the shadercode specifies it at the top. Defaults to "cc-by-nc-sa-3.0" by default.
     """
-    return "default"
+    
+    detections = [x.matches[0] for x in detect_licenses(query_string=code) if x.matches[0].lines()[0] < 5] # TODO: find a better solution than hardcoding 5
+    if len(detections) == 0:
+        return "cc-by-nc-sa-3.0"
+    return detections[0].to_dict().get("license_expression", None)
 
 
 if __name__ == "__main__":
@@ -87,7 +95,9 @@ if __name__ == "__main__":
         if file.endswith(".jsonl"):
             with jsonlines.open(os.path.join(input_dir, file), "r") as reader:
                 shaders = list(reader)
-            annotated_shaders = [annotate(shader_data) for shader_data in shaders]
+            annotated_shaders = []
+            for shader in tqdm.tqdm(shaders):
+                annotated_shaders.append(annotate(shader))
             output_path = os.path.join(output_dir, file)
             with jsonlines.open(output_path, mode="w") as writer:
                 for shader in annotated_shaders:
