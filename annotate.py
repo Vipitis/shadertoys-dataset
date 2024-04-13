@@ -32,6 +32,7 @@ def annotate(shader_data: dict, access: str="api") -> dict:
     )
     out_dict["time_retrieved"] = datetime.datetime.now().isoformat()
     out_dict["access"] = access # api, unlisted, public/scraped? not sure yet.
+    out_dict["wgpu-test"] = try_shader({"Shader": shader_data}) # to avoid calling API once again.
 
     return out_dict
 
@@ -84,6 +85,21 @@ def classify_license(code: str) -> str:
     if len(detections) == 0:
         return "cc-by-nc-sa-3.0"
     return detections[0].to_dict().get("license_expression", None)
+
+def try_shader(shader_data: dict) -> str:
+    """
+    Tests a shader by running it in wgpu-shadertoy. Returns one of the following:
+    "ok" - shader ran without error
+    "incomplete" - not yet fully supported in wgpu-shadertoy
+    "error" - wgpu-shadertoy threw and error (is likely still valid on the website)
+    "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
+    """
+    try:
+        shader = Shadertoy.from_json(shader_data, offscreen=True)
+        # shader.show() not required I think...
+        return "ok"
+    except Exception as e:
+        return "error"
 
 
 if __name__ == "__main__":
