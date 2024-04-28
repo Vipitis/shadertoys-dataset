@@ -63,6 +63,8 @@ def get_shader(shader_id) -> dict:
     shader_data = response.json()
     if "Error" in shader_data:
         raise ValueError(f"Failed to load shader {shader_id}: {shader_data['Error']}") #TODO: consider scraping here: https://github.com/pygfx/shadertoy/pull/27
+    
+    shader_data["Shader"]["time_retrieved"] = datetime.datetime.now().isoformat()
     return shader_data
 
 

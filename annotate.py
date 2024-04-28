@@ -49,6 +49,7 @@ def flatten_shader_data(shader_data: dict) -> dict:
     out_dict["author"] = shader_data["info"]["username"]
     out_dict["description"] = shader_data["info"]["description"]
     out_dict["tags"] = shader_data["info"]["tags"]
+    out_dict["time_retrieved"] = shader_data["time_retrieved"]
 
     pass_names = [
         "Image",
@@ -97,9 +98,12 @@ def try_shader(shader_data: dict) -> str:
     try:
         shader = Shadertoy.from_json(shader_data, offscreen=True)
         # shader.show() not required I think...
-        return "ok"
     except Exception as e:
         return "error"
+    if not shader.complete:
+        return "incomplete"
+    return "ok"
+
 
 
 if __name__ == "__main__":

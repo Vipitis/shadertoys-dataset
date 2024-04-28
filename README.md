@@ -2,11 +2,11 @@
 
 This repository contains the code to download, build and update the Shadertoys dataset.
 The dataset is made up from fragment shader programs published on [Shadertoy](https://www.shadertoy.com/) and annotated with additional metadata for downstream filtering.
-Datasets are hosted on [Huggingface](https://huggingface.co/datasets/Vipitis/Shadertoys). (maybe we name it Shadertoys-2 to avoid overwriting anything)
+Datasets are hosted on [Huggingface](https://huggingface.co/datasets/Vipitis/Shadertoys), (no longer public). (maybe we name it Shadertoys-2 to avoid overwriting anything)
 
 The main use case for this dataset is various evaluation benchmarks for (code-) language models. It can also be used for fine tuning objectives. The train/test split is shared across all subsets, however deduplication is not guaranteed, therefore data contaimination is very likely.
 
-This project is not affiliated with Shadertoy.
+This project is not affiliated with Shadertoy. It makes use of the Shadertoy.com API.
 
 ## To-Dos
 This project is still in progress, all datasets currently published will see a major refactor.
