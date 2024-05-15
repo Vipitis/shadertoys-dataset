@@ -1,0 +1,6 @@
+wgpu
+wgpu-shadertoy
+requests
+jsonlines
+scancode-toolkit
+tqdm

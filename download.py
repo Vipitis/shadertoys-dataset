@@ -177,6 +177,7 @@ def extract_id(id_or_url):
 
 if __name__ == "__main__":
     args = argument_parser.parse_args()
+    print(args)
     if args.mode == "shaders20k":
         get_shaders20k()
         exit()
