@@ -21,7 +21,7 @@ argument_parser.add_argument(
 )
 
 
-def annotate(shader_data: dict, access: str="api") -> dict:
+def annotate(shader_data: dict, access: str = "api") -> dict:
     """
     Functions calls a bunch of smaller functions to annotate and flatten a instance of a shader_data json respose
     Returns a flattened dict that is a dataset insanace
@@ -34,10 +34,13 @@ def annotate(shader_data: dict, access: str="api") -> dict:
         f"https://www.shadertoy.com/media/shaders/{shader_data['info']['id']}.jpg"
     )
     out_dict["time_retrieved"] = datetime.datetime.now().isoformat()
-    out_dict["access"] = access # api, unlisted, public/scraped? not sure yet.
-    out_dict["wgpu-test"] = try_shader(shader_data={"Shader": shader_data},image_code=out_dict["image_code"]) # to avoid calling API once again.
+    out_dict["access"] = access  # api, unlisted, public/scraped? not sure yet.
+    out_dict["wgpu-test"] = try_shader(
+        shader_data={"Shader": shader_data}, image_code=out_dict["image_code"]
+    )  # to avoid calling API once again.
 
     return out_dict
+
 
 def flatten_shader_data(shader_data: dict) -> dict:
     """
@@ -67,7 +70,9 @@ def flatten_shader_data(shader_data: dict) -> dict:
     for rp in shader_data["renderpass"]:
         # remove the pass name from the list
         try:
-            pass_names.remove(rp["name"])  # TODO: test for value error here? ('', 'Buffer @', 'none', 'Buf C', 'Text Lib', 'Buf A', 'Buf B', 'Buf D')
+            pass_names.remove(
+                rp["name"]
+            )  # TODO: test for value error here? ('', 'Buffer @', 'none', 'Buf C', 'Text Lib', 'Buf A', 'Buf B', 'Buf D')
         except ValueError:
             print(f"Pass name not standard: {rp['name']=}, skipping...")
             continue
@@ -88,11 +93,16 @@ def classify_license(code: str) -> str:
     """
     Returns the spdx license identifier, if the shadercode specifies it at the top. Defaults to "cc-by-nc-sa-3.0" by default.
     """
-    
-    detections = [x.matches[0] for x in detect_licenses(query_string=code) if x.matches[0].lines()[0] < 5] # TODO: find a better solution than hardcoding 5
+
+    detections = [
+        x.matches[0]
+        for x in detect_licenses(query_string=code)
+        if x.matches[0].lines()[0] < 5
+    ]  # TODO: find a better solution than hardcoding 5
     if len(detections) == 0:
         return "cc-by-nc-sa-3.0"
     return detections[0].to_dict().get("license_expression", None)
+
 
 def try_shader(shader_data: dict, image_code: str) -> str:
     """
@@ -105,10 +115,14 @@ def try_shader(shader_data: dict, image_code: str) -> str:
 
     # code snippet from elsewhere, ref: https://huggingface.co/spaces/Vipitis/shadermatch/blob/main/shadermatch.py#L141-L157
     try:
-        shadermatch.validate_shadertoy(image_code) #only checks the main image pass, could still crash if common or other passes have issues...
+        shadermatch.validate_shadertoy(
+            image_code
+        )  # only checks the main image pass, could still crash if common or other passes have issues...
     except Exception as e:
         if isinstance(e, ValueError):
-            print(f"ValueError: {e} for shader {shader_data['Shader']['info']['id']=}, counts as error")
+            print(
+                f"ValueError: {e} for shader {shader_data['Shader']['info']['id']=}, counts as error"
+            )
             return "error"
         if "panicked" in e.message or "timedout" in e.message:
             return "panic"
@@ -122,7 +136,6 @@ def try_shader(shader_data: dict, image_code: str) -> str:
     if not shader.complete:
         return "incomplete"
     return "ok"
-
 
 
 if __name__ == "__main__":
@@ -143,4 +156,3 @@ if __name__ == "__main__":
                 for shader in annotated_shaders:
                     writer.write(shader)
             print(f"Annotated {file} to {output_path}")
-

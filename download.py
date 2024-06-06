@@ -91,19 +91,25 @@ def get_shaders20k(data_dir="./data/raw/"):
             shaders = []
             subdir = root.split("\\")[-1]
             print(subdir)
+            if not files:
+                # skip this the empty dir?
+                continue
             # break
-            output_path = os.path.join(data_dir, f"shaders20k_{subdir}.jsonl")
-            for file in files:
-                # print(file)
+            # output_path = os.path.join(data_dir, f"shaders20k_{subdir}.jsonl")
+            for file in tqdm.tqdm(files):
                 # break
                 with open(os.path.join(root, file), "r") as f:
                     shader_data = json.loads(f.read())
                 shader_data = scrape_to_api(shader_data)
+                shader_date = datetime.datetime.fromtimestamp(
+                    float(shader_data["Shader"]["info"]["date"])
+                ).strftime("%Y-%m")
+                output_path = os.path.join(data_dir, f"20k_{shader_date}.jsonl")
                 shader_data["Shader"]["time_retrieved"] = datetime.datetime(
                     year=2021, month=10, day=1
                 ).isoformat()  # Ocotber 2021 according to repo
-                shaders.append(shader_data)
-            append_shaders(output_path, shaders)
+                append_shaders(output_path, [shader_data])
+                # shaders.append(shader_data)
 
 
 def get_all_shaders():
@@ -132,6 +138,7 @@ def get_shader(shader_id) -> dict:
         )  # TODO: consider scraping here: https://github.com/pygfx/shadertoy/pull/27
 
     shader_data["Shader"]["time_retrieved"] = datetime.datetime.now().isoformat()
+
     return shader_data
 
 
@@ -197,12 +204,15 @@ if __name__ == "__main__":
     num_ids = len(shader_ids)
     if num_ids > 1000:
         raise NotImplementedError("Chunking not yet implemented")
-    first_id = shader_ids[0]
-    last_id = shader_ids[-1]
-    output_path = os.path.join(args.output_dir, f"{first_id}_{last_id}.jsonl")
+
     print(f"Total number of shaders ids: {num_ids}")
 
     for shader_id in tqdm.tqdm(shader_ids):
         shader = get_shader(shader_id)
+        # from unix timestamp to year and month
+        shader_date = datetime.datetime.fromtimestamp(
+            float(shader["Shader"]["info"]["date"])
+        ).strftime("%Y-%m")
+        output_path = os.path.join(args.output_dir, f"{shader_date}.jsonl")
         append_shaders(output_path, [shader])
     print(f"Downloaded {num_ids} shaders to {output_path}")

@@ -45,7 +45,7 @@ There is currently two out of three scripts available. Plenty of defaults are se
 
 ### Download
 ```shell
-$>download.py --mode full --num_shaders 100
+$>python download.py --mode full --num_shaders 100
 ```
 will download the newest 100 shaders from Shadertoy.com via the API and save them to the `./data/raw/` directory as a .jsonl file.
 
@@ -53,7 +53,7 @@ see `download.py --help` for more options. Or look at the [source](./download.py
 
 ### Annotate
 ```shell
-$>annotate.py 
+$>python annotate.py 
 ```
 this flattens the nested renderpasses into a single dict and adds relevant information like licenses
 
