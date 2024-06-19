@@ -12,16 +12,15 @@ from licensedcode.detection import detect_licenses
 
 from wgpu_shadertoy import Shadertoy
 
-shadermatch = evaluate.load("Vipitis/shadermatch")
-
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--input", type=str, required=False, default="./data/raw/")
 argument_parser.add_argument(
     "--output", type=str, required=False, default="./data/annotated/"
 )
+argument_parser.add_argument("--test", action="store_true", default=False, help="optionally tried to run the shader in wgpu-shadertoy, default is False.")
 
 
-def annotate(shader_data: dict, access: str = "api") -> dict:
+def annotate(shader_data: dict, args,  access: str = "api") -> dict:
     """
     Functions calls a bunch of smaller functions to annotate and flatten a instance of a shader_data json respose
     Returns a flattened dict that is a dataset insanace
@@ -35,9 +34,12 @@ def annotate(shader_data: dict, access: str = "api") -> dict:
     )
     out_dict["time_retrieved"] = datetime.datetime.now().isoformat()
     out_dict["access"] = access  # api, unlisted, public/scraped? not sure yet.
-    out_dict["wgpu-test"] = try_shader(
-        shader_data={"Shader": shader_data}, image_code=out_dict["image_code"]
-    )  # to avoid calling API once again.
+    if args.test:
+        out_dict["wgpu-test"] = try_shader(
+            shader_data={"Shader": shader_data}, image_code=out_dict["image_code"]
+        )  # to avoid calling API once again.
+    else:
+        out_dict["wgpu-test"] = "not-tested"
 
     return out_dict
 
@@ -55,6 +57,11 @@ def flatten_shader_data(shader_data: dict) -> dict:
     out_dict["author"] = shader_data["info"]["username"]
     out_dict["description"] = shader_data["info"]["description"]
     out_dict["tags"] = shader_data["info"]["tags"]
+    out_dict["likes"] = shader_data["info"]["likes"]
+    out_dict["viewed"] = shader_data["info"]["viewed"]
+    # out_dict["parentid"] = shader_data["info"]["parentid"] # if it's forked (only available in download/scrape) - not in API...
+    # out_dict["privacy"] = shader_data["info"]["published"] # download uses {0: "private?", 3: "Public API"} ...? tbh check
+    out_dict["date"] = shader_data["info"]["date"] #maybe format into a readable format or at least int?
     out_dict["time_retrieved"] = shader_data["time_retrieved"]
 
     pass_names = [
@@ -68,6 +75,10 @@ def flatten_shader_data(shader_data: dict) -> dict:
         "Cube A",
     ]
     for rp in shader_data["renderpass"]:
+        # if there is just one pass, it has to be the image Pass.
+        if len(shader_data["renderpass"]) == 1:
+            rp["name"] = "Image"
+
         # remove the pass name from the list
         try:
             pass_names.remove(
@@ -91,7 +102,7 @@ def flatten_shader_data(shader_data: dict) -> dict:
 
 def classify_license(code: str) -> str:
     """
-    Returns the spdx license identifier, if the shadercode specifies it at the top. Defaults to "cc-by-nc-sa-3.0" by default.
+    Returns the spdx license identifier, if the shadercode specifies it at the top. Defaults to "CC-BY-NC-SA-3.0".
     """
 
     detections = [
@@ -100,7 +111,8 @@ def classify_license(code: str) -> str:
         if x.matches[0].lines()[0] < 5
     ]  # TODO: find a better solution than hardcoding 5
     if len(detections) == 0:
-        return "cc-by-nc-sa-3.0"
+        # base case is capitalized for downstream analysis
+        return "CC-BY-NC-SA-3.0"
     return detections[0].to_dict().get("license_expression", None)
 
 
@@ -112,7 +124,12 @@ def try_shader(shader_data: dict, image_code: str) -> str:
     "error" - wgpu-shadertoy threw and error (is likely still valid on the website)
     "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
     """
-
+    try:
+        # TODO: tjos
+        shadermatch = evaluate.load("Vipitis/shadermatch")
+    except Exception as e:
+        print(f"Failed to load shadermatch: {e}")
+        return "not-tested"
     # code snippet from elsewhere, ref: https://huggingface.co/spaces/Vipitis/shadermatch/blob/main/shadermatch.py#L141-L157
     try:
         shadermatch.validate_shadertoy(
@@ -144,14 +161,18 @@ if __name__ == "__main__":
     output_dir = args.output
 
     for file in os.listdir(input_dir):
+        source = "api" #default?
+        if file.startswith("20k"):
+            source = "shaders20k"
         if file.endswith(".jsonl"):
             print(f"Annotating {file}")
             with jsonlines.open(os.path.join(input_dir, file), "r") as reader:
                 shaders = list(reader)
             annotated_shaders = []
             for shader in tqdm.tqdm(shaders):
-                annotated_shaders.append(annotate(shader))
+                annotated_shaders.append(annotate(shader,args=args, access=source))
             output_path = os.path.join(output_dir, file)
+            # TODO: consider appending/overwriting? needs proper indexing...
             with jsonlines.open(output_path, mode="w") as writer:
                 for shader in annotated_shaders:
                     writer.write(shader)
