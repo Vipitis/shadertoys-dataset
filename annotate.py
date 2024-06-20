@@ -160,12 +160,12 @@ if __name__ == "__main__":
     input_dir = args.input
     output_dir = args.output
 
-    for file in os.listdir(input_dir):
+    for file in tqdm.tqdm(os.listdir(input_dir)):
         source = "api" #default?
         if file.startswith("20k"):
             source = "shaders20k"
         if file.endswith(".jsonl"):
-            print(f"Annotating {file}")
+            tqdm.tqdm.write(f"Annotating {file}")
             with jsonlines.open(os.path.join(input_dir, file), "r") as reader:
                 shaders = list(reader)
             annotated_shaders = []
@@ -176,4 +176,4 @@ if __name__ == "__main__":
             with jsonlines.open(output_path, mode="w") as writer:
                 for shader in annotated_shaders:
                     writer.write(shader)
-            print(f"Annotated {file} to {output_path}")
+            tqdm.tqdm.write(f"Annotated {file} to {output_path}")

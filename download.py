@@ -47,6 +47,8 @@ def scrape_to_api(json_data: dict) -> dict:
     """
     transform the dict to be exactly like the API return would provide it
     """
+    privacy_keys = {0: "Private", 1: "Public", 2: "Unlisted", 3: "Public API", 4: "Anonymous"}
+    
     shader_data = {
         "Shader": {
             "info": json_data["info"],
@@ -54,11 +56,14 @@ def scrape_to_api(json_data: dict) -> dict:
             "renderpass": json_data["renderpass"],
         }
     }
-    del shader_data["Shader"]["info"]["usePreview"]
+    # del shader_data["Shader"]["info"]["usePreview"] # indicates if a shader is "heavy" and should not be rendered in preview. Maybe useful for filtering?
     for rp in shader_data["Shader"]["renderpass"]:
         for inp in rp["inputs"]:
             inp["src"] = inp.pop("filepath")
             inp["ctype"] = inp.pop("type")
+
+    
+    shader_data["Shader"]["info"]["published"] = privacy_keys.get(shader_data["Shader"]["info"]["published"], "Unknown")
 
     return shader_data
 
@@ -67,6 +72,8 @@ def get_shaders20k(data_dir="./data/raw/"):
     zip_path = os.path.join(data_dir, "shaders20k", "all_codes.zip")
     # ./data/ids/shaders20k.txt
     ids_dest = os.path.abspath("./data/ids/shaders20k.txt")
+    date_20k = datetime.datetime(year=2021, month=10, day=1).isoformat()  # Ocotber 2021 according to repo
+
     if not os.path.exists(zip_path):
         raise NotImplementedError(
             "use the original script for now: https://github.com/mbaradad/shaders21k/blob/main/scripts/download/download_shader_codes.sh"
@@ -84,13 +91,9 @@ def get_shaders20k(data_dir="./data/raw/"):
                 ),
                 ids_dest,
             )
-        for root, dir, files in os.walk(
+        for root, dir, files in tqdm.tqdm(os.walk(
             os.path.join(temp_dir, "shader_codes", "shadertoy")
-        ):
-            print(root, dir)
-            shaders = []
-            subdir = root.split("\\")[-1]
-            print(subdir)
+        )):
             if not files:
                 # skip this the empty dir?
                 continue
@@ -105,9 +108,7 @@ def get_shaders20k(data_dir="./data/raw/"):
                     float(shader_data["Shader"]["info"]["date"])
                 ).strftime("%Y-%m")
                 output_path = os.path.join(data_dir, f"20k_{shader_date}.jsonl")
-                shader_data["Shader"]["time_retrieved"] = datetime.datetime(
-                    year=2021, month=10, day=1
-                ).isoformat()  # Ocotber 2021 according to repo
+                shader_data["Shader"]["time_retrieved"] = date_20k
                 append_shaders(output_path, [shader_data])
                 # shaders.append(shader_data)
 
