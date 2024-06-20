@@ -62,7 +62,7 @@ see `download.py --help` for more options. Or look at the [source](./download.py
 ```shell
 $>python annotate.py 
 ```
-this flattens the nested renderpasses into a single dict and adds relevant information like licenses.
+this flattens the nested renderpasses into a single dict and adds relevant information like licenses. It can take nearly 3 hours (improvements to come soon).
 
 ### Upload (missing)
 scripts to build train/test split and upload them to Huggingface aren't written yet.

@@ -20,7 +20,7 @@ argument_parser.add_argument(
 argument_parser.add_argument("--test", action="store_true", default=False, help="optionally tried to run the shader in wgpu-shadertoy, default is False.")
 
 
-def annotate(shader_data: dict, args,  access: str = "api") -> dict:
+def annotate(shader_data: dict, test=False,  access: str = "api") -> dict:
     """
     Functions calls a bunch of smaller functions to annotate and flatten a instance of a shader_data json respose
     Returns a flattened dict that is a dataset insanace
@@ -34,7 +34,7 @@ def annotate(shader_data: dict, args,  access: str = "api") -> dict:
     )
     out_dict["time_retrieved"] = datetime.datetime.now().isoformat()
     out_dict["access"] = access  # api, unlisted, public/scraped? not sure yet.
-    if args.test:
+    if test:
         out_dict["wgpu-test"] = try_shader(
             shader_data={"Shader": shader_data}, image_code=out_dict["image_code"]
         )  # to avoid calling API once again.
@@ -60,7 +60,7 @@ def flatten_shader_data(shader_data: dict) -> dict:
     out_dict["likes"] = shader_data["info"]["likes"]
     out_dict["viewed"] = shader_data["info"]["viewed"]
     # out_dict["parentid"] = shader_data["info"]["parentid"] # if it's forked (only available in download/scrape) - not in API...
-    # out_dict["privacy"] = shader_data["info"]["published"] # download uses {0: "private?", 3: "Public API"} ...? tbh check
+    out_dict["published"] = shader_data["info"]["published"] # download uses {0: "private?", 3: "Public API"} ...? tbh check
     out_dict["date"] = shader_data["info"]["date"] #maybe format into a readable format or at least int?
     out_dict["time_retrieved"] = shader_data["time_retrieved"]
 
@@ -170,7 +170,7 @@ if __name__ == "__main__":
                 shaders = list(reader)
             annotated_shaders = []
             for shader in tqdm.tqdm(shaders):
-                annotated_shaders.append(annotate(shader,args=args, access=source))
+                annotated_shaders.append(annotate(shader,test=args.test, access=source))
             output_path = os.path.join(output_dir, file)
             # TODO: consider appending/overwriting? needs proper indexing...
             with jsonlines.open(output_path, mode="w") as writer:
