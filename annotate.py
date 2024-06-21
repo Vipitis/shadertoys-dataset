@@ -8,7 +8,7 @@ import tqdm
 import evaluate
 
 from licensedcode.detection import detect_licenses
-
+shadermatch = evaluate.load("Vipitis/shadermatch")
 
 from wgpu_shadertoy import Shadertoy
 
@@ -20,7 +20,7 @@ argument_parser.add_argument(
 argument_parser.add_argument("--test", action="store_true", default=False, help="optionally tried to run the shader in wgpu-shadertoy, default is False.")
 
 
-def annotate(shader_data: dict, test=False,  access: str = "api") -> dict:
+def annotate_shader(shader_data: dict, test=False,  access: str = "api") -> dict:
     """
     Functions calls a bunch of smaller functions to annotate and flatten a instance of a shader_data json respose
     Returns a flattened dict that is a dataset insanace
@@ -124,12 +124,14 @@ def try_shader(shader_data: dict, image_code: str) -> str:
     "error" - wgpu-shadertoy threw and error (is likely still valid on the website)
     "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
     """
-    try:
-        # TODO: tjos
-        shadermatch = evaluate.load("Vipitis/shadermatch")
-    except Exception as e:
-        print(f"Failed to load shadermatch: {e}")
-        return "not-tested"
+    if "Shader" not in shader_data:
+        shader_data["Shader"] = shader_data
+    # try:
+    #     # TODO: tjos
+    #     shadermatch = evaluate.load("Vipitis/shadermatch")
+    # except Exception as e:
+    #     print(f"Failed to load shadermatch: {e}")
+    #     return "not-tested"
     # code snippet from elsewhere, ref: https://huggingface.co/spaces/Vipitis/shadermatch/blob/main/shadermatch.py#L141-L157
     try:
         shadermatch.validate_shadertoy(
@@ -146,7 +148,7 @@ def try_shader(shader_data: dict, image_code: str) -> str:
         else:
             return "error"
     try:
-        shader = Shadertoy.from_json(shader_data, offscreen=True)
+        shader = Shadertoy.from_json(shader_data["Shader"], offscreen=True, shader_type="glsl")
         # shader.show() not required I think...
     except Exception as e:
         return "error"
@@ -170,7 +172,7 @@ if __name__ == "__main__":
                 shaders = list(reader)
             annotated_shaders = []
             for shader in tqdm.tqdm(shaders):
-                annotated_shaders.append(annotate(shader,test=args.test, access=source))
+                annotated_shaders.append(annotate_shader(shader,test=args.test, access=source))
             output_path = os.path.join(output_dir, file)
             # TODO: consider appending/overwriting? needs proper indexing...
             with jsonlines.open(output_path, mode="w") as writer:
