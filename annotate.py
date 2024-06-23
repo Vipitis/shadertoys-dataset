@@ -109,7 +109,7 @@ def classify_license(code: str) -> str:
         x.matches[0]
         for x in detect_licenses(query_string=code)
         if x.matches[0].lines()[0] < 5
-    ]  # TODO: find a better solution than hardcoding 5
+    ]  # TODO: find a better solution than hardcoding 5 this potentionally cuts up long license statemetns like MIT. 
     if len(detections) == 0:
         # base case is capitalized for downstream analysis
         return "CC-BY-NC-SA-3.0"
