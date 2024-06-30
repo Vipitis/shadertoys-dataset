@@ -2,15 +2,19 @@ import json
 import jsonlines
 import os
 import datetime
-import tree_sitter  # do we want this here -> annotate function byte-indecies?
 import argparse
 import tqdm
 import evaluate
-
-from licensedcode.detection import detect_licenses
-shadermatch = evaluate.load("Vipitis/shadermatch")
-
+import tree_sitter_glsl as tsglsl
+from tree_sitter import Language, Parser
+from typing import List, Tuple
 from wgpu_shadertoy import Shadertoy
+from licensedcode.detection import detect_licenses
+
+GLSL_LANGUAGE = Language(tsglsl.language())
+parser = Parser(GLSL_LANGUAGE)
+
+shadermatch = evaluate.load("Vipitis/shadermatch")
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--input", type=str, required=False, default="./data/raw/")
@@ -114,6 +118,44 @@ def classify_license(code: str) -> str:
         # base case is capitalized for downstream analysis
         return "CC-BY-NC-SA-3.0"
     return detections[0].to_dict().get("license_expression", None)
+
+def parse_functions(code:str) -> List[Tuple[int,int,int,int,int]]:
+    """
+    parses the code using tree-parser-glsl
+    returns the **byte-indecies** for before_comment, start header, end header, end docstring, end_function.
+    returns a list 5-tupel. If before_comment or docstring aren't found, the indiecies will coinside with the next one.
+    """
+    tree = parser.parse(bytes(code, encoding="utf-8"))
+    root_node = tree.root_node
+    funcs = []
+    
+    # lazy init
+    start_comment = start_header = end_header = end_docstring = end_function = None
+    comment_line = -2
+    for child in root_node.children:
+        if child.type == "comment" and comment_line + 1 != child.end_point[0]:
+            start_comment = child.start_byte
+            comment_line = child.end_point[0]
+        if child.type == "function_definition":
+            start_header = child.start_byte
+            if not start_comment:
+                start_comment = start_header
+            end_function = child.end_byte
+            end_header = child.children[-1].children[0].end_byte
+            # inside the function body, past the "{"
+            for sub_child in child.children[-1].children[1:]:
+                if sub_child.type == "comment":
+                    end_docstring = sub_child.end_byte
+                else:
+                    if not end_docstring:
+                        end_docstring = end_header
+                    break
+                
+
+
+            funcs.append(tuple([start_comment, start_header, end_header, end_docstring, end_function]))
+            start_comment = start_header = end_header = end_docstring = end_function = None
+    return funcs
 
 
 def try_shader(shader_data: dict, image_code: str) -> str:
