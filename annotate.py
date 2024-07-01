@@ -12,7 +12,7 @@ from wgpu_shadertoy import Shadertoy
 from licensedcode.detection import detect_licenses
 
 GLSL_LANGUAGE = Language(tsglsl.language())
-parser = Parser(GLSL_LANGUAGE)
+PARSER = Parser(GLSL_LANGUAGE)
 
 shadermatch = evaluate.load("Vipitis/shadermatch")
 
@@ -32,7 +32,7 @@ def annotate_shader(shader_data: dict, test=False,  access: str = "api") -> dict
     if "Shader" in shader_data:
         shader_data = shader_data["Shader"]
     out_dict = flatten_shader_data(shader_data)
-    out_dict["license"] = classify_license(out_dict["image_code"])
+    out_dict["license"] = check_license(out_dict["image_code"])
     out_dict["thumbnail"] = (
         f"https://www.shadertoy.com/media/shaders/{shader_data['info']['id']}.jpg"
     )
@@ -104,20 +104,26 @@ def flatten_shader_data(shader_data: dict) -> dict:
     return out_dict
 
 
-def classify_license(code: str) -> str:
+def check_license(code: str) -> str:
     """
-    Returns the spdx license identifier, if the shadercode specifies it at the top. Defaults to "CC-BY-NC-SA-3.0".
+    Returns the license mentioned if the first node is a comment.
+    if none is found, or no comment, returns "CC-BY-NC-SA-3.0" as the base case.
     """
-
-    detections = [
-        x.matches[0]
-        for x in detect_licenses(query_string=code)
-        if x.matches[0].lines()[0] < 5
-    ]  # TODO: find a better solution than hardcoding 5 this potentionally cuts up long license statemetns like MIT. 
-    if len(detections) == 0:
-        # base case is capitalized for downstream analysis
-        return "CC-BY-NC-SA-3.0"
-    return detections[0].to_dict().get("license_expression", None)
+    tree = PARSER.parse(bytes(code, encoding="utf-8"))
+    comment_bytes = b""
+    cursor = tree.walk()
+    cursor.goto_first_child()
+    # is a while node really a good idea?
+    while cursor.node.type == "comment":
+        comment_bytes += cursor.node.text
+        cursor.goto_next_sibling()
+    if comment_bytes:
+        detections = [x.matches[0] for x in detect_licenses(query_string=comment_bytes.decode(encoding="utf-8"))]
+        if len(detections) >= 1:
+            return detections[0].to_dict().get("license_expression", None)
+    
+    # base case is capitalized for downstream analysis
+    return "CC-BY-NC-SA-3.0"
 
 def parse_functions(code:str) -> List[Tuple[int,int,int,int,int]]:
     """
@@ -125,7 +131,7 @@ def parse_functions(code:str) -> List[Tuple[int,int,int,int,int]]:
     returns the **byte-indecies** for before_comment, start header, end header, end docstring, end_function.
     returns a list 5-tupel. If before_comment or docstring aren't found, the indiecies will coinside with the next one.
     """
-    tree = parser.parse(bytes(code, encoding="utf-8"))
+    tree = PARSER.parse(bytes(code, encoding="utf-8"))
     root_node = tree.root_node
     funcs = []
     
@@ -150,8 +156,6 @@ def parse_functions(code:str) -> List[Tuple[int,int,int,int,int]]:
                     if not end_docstring:
                         end_docstring = end_header
                     break
-                
-
 
             funcs.append(tuple([start_comment, start_header, end_header, end_docstring, end_function]))
             start_comment = start_header = end_header = end_docstring = end_function = None
