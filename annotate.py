@@ -137,14 +137,15 @@ def parse_functions(code:str) -> List[Tuple[int,int,int,int,int]]:
     
     # lazy init
     start_comment = start_header = end_header = end_docstring = end_function = None
-    comment_line = -2
+    comment_line = -2 #init with a different number?
     for child in root_node.children:
-        if child.type == "comment" and comment_line + 1 != child.end_point[0]:
-            start_comment = child.start_byte
+        if (child.type == "comment"):
+            if ((comment_line + 1) != child.start_point[0]): # and child.start_point[1] == 0 # and not child.start_point[1] # so we only get whole line comments, nothing inline. but tabs or indentation might be an issue?
+                start_comment = child.start_byte
             comment_line = child.end_point[0]
-        if child.type == "function_definition":
+        elif child.type == "function_definition":
             start_header = child.start_byte
-            if not start_comment:
+            if comment_line == -2 and not start_comment: # so we can also get multi line comments at the start (but inline comments?)
                 start_comment = start_header
             end_function = child.end_byte
             end_header = child.children[-1].children[0].end_byte
@@ -155,10 +156,11 @@ def parse_functions(code:str) -> List[Tuple[int,int,int,int,int]]:
                 else:
                     if not end_docstring:
                         end_docstring = end_header
-                    break
+                    break #which part does this break out of? early stopping somehow...
 
             funcs.append(tuple([start_comment, start_header, end_header, end_docstring, end_function]))
             start_comment = start_header = end_header = end_docstring = end_function = None
+            comment_line = -2 # so out empty check can work again
     return funcs
 
 
