@@ -60,11 +60,13 @@ see `download.py --help` for more options. Or look at the [source](./download.py
 
 ### Annotate
 ```shell
-$>python annotate.py 
+$>python annotate.py --mode "redo" --columns "license, functions"
 ```
-this flattens the nested renderpasses into a single dict and adds relevant information like licenses. It can take nearly 3 hours (improvements to come soon).
+this flattens the nested renderpasses into a single dict and adds relevant information like licenses, function indicies and test-validation. It seems to only do take a few minutes now.
+alternatively the mode `update` allows to overwrite the columns of already flattened files.
 
-### Upload (missing)
+### Upload (missing) /prepare
+Filter and 
 scripts to build train/test split and upload them to Huggingface aren't written yet.
 
 
