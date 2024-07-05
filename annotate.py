@@ -186,7 +186,7 @@ def parse_functions(code_or_shader) -> List[Tuple[int,int,int,int,int]]:
                         end_docstring = end_header
                     break #which part does this break out of? early stopping somehow...
 
-            funcs.append(tuple([start_comment, start_header, end_header, end_docstring, end_function]))
+            funcs.append(tuple([start_comment, start_header, end_header, end_docstring, end_function])) #jsonlines turns this into a list again?
             start_comment = start_header = end_header = end_docstring = end_function = None
             comment_line = -2 # so out empty check can work again
     return funcs
