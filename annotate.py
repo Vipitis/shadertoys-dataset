@@ -254,6 +254,7 @@ if __name__ == "__main__":
         for file in tqdm.tqdm(os.listdir(input_dir)):
             if not file.endswith(".jsonl"):
                 tqdm.tqdm.write(f"Skipping file {file}")
+                continue
             source = "api" #default?
             if file.startswith("20k"): #should we do api_ prefix for the others?
                 source = "shaders20k"
@@ -275,6 +276,7 @@ if __name__ == "__main__":
         for file in tqdm.tqdm(os.listdir(output_dir)):
             if not file.endswith(".jsonl"):
                 tqdm.tqdm.write(f"Skipping file {file}")
+                continue
             with jsonlines.open(os.path.join(output_dir, file), "r") as reader:
                 old_annotations = list(reader)
             new_annotations = []
