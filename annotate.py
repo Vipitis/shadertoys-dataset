@@ -1,4 +1,5 @@
 import json
+from argon2 import Type
 import jsonlines
 import os
 import datetime
@@ -11,20 +12,22 @@ from typing import List, Tuple
 from wgpu_shadertoy import Shadertoy
 from licensedcode.detection import detect_licenses
 
+from wgpu_shadertoy.api import shader_args_from_json
+
 GLSL_LANGUAGE = Language(tsglsl.language())
 PARSER = Parser(GLSL_LANGUAGE)
 
 shadermatch = evaluate.load("Vipitis/shadermatch")
 
 argument_parser = argparse.ArgumentParser()
-argument_parser.add_argument("--input", type=str, required=False, default="./data/raw/")
-argument_parser.add_argument(
-    "--output", type=str, required=False, default="./data/annotated/"
-)
-argument_parser.add_argument("--test", action="store_true", default=False, help="optionally tried to run the shader in wgpu-shadertoy, default is False.")
+argument_parser.add_argument("--input", type=str, required=False, default="./data/raw/", help="the path of raw shadertoy api returns .jsonl")
+argument_parser.add_argument("--output", type=str, required=False, default="./data/annotated/", help="the path of where to store annotated shaders as .jsonl")
+argument_parser.add_argument("--mode", type=str, default="update", help="mode `update` will load shaders already in the output folder and overwrite specified columns; mode `redo` will overwrite the whole file")
+argument_parser.add_argument("--columns", type=str, required=True, help="comma separated list of columns to annotate: all, license, functions, test; if empty will simply faltten the nested structure") 
+# TODO: is --mode "update" --columns "all" is the same as --mode "redo"?
 
 
-def annotate_shader(shader_data: dict, test=False,  access: str = "api") -> dict:
+def annotate_shader(shader_data: dict, columns: list, access: str = "api") -> dict:
     """
     Functions calls a bunch of smaller functions to annotate and flatten a instance of a shader_data json respose
     Returns a flattened dict that is a dataset insanace
@@ -32,30 +35,39 @@ def annotate_shader(shader_data: dict, test=False,  access: str = "api") -> dict
     if "Shader" in shader_data:
         shader_data = shader_data["Shader"]
     out_dict = flatten_shader_data(shader_data)
-    out_dict["license"] = check_license(out_dict["image_code"])
     out_dict["thumbnail"] = (
         f"https://www.shadertoy.com/media/shaders/{shader_data['info']['id']}.jpg"
     )
-    out_dict["time_retrieved"] = datetime.datetime.now().isoformat()
-    out_dict["access"] = access  # api, unlisted, public/scraped? not sure yet.
-    if test:
-        out_dict["wgpu-test"] = try_shader(
-            shader_data={"Shader": shader_data}, image_code=out_dict["image_code"]
-        )  # to avoid calling API once again.
-    else:
-        out_dict["wgpu-test"] = "not-tested"
+    out_dict["access"] = access  # api, shaders20k, ?
+
+    # overwrite to update?
+    out_dict = update_shader(out_dict, columns=columns)
 
     return out_dict
+
+def update_shader(flattened_shader: dict, columns: list) -> dict:
+    updated_shader = flattened_shader.copy() # do we need that?
+    
+    cols_to_update = columns.copy() #seems redundant
+    if "all" in columns:
+        cols_to_update = list(COLUMN_MAP.keys())
+    for col in cols_to_update:
+        col_func = COLUMN_MAP[col]
+        updated_shader.update({col: col_func(flattened_shader)})
+    # TODO: set None for cols not mentioned?
+
+    return updated_shader
 
 
 def flatten_shader_data(shader_data: dict) -> dict:
     """
-    Falttens all renderpasses into a single depth dict, adds None where not present
+    Falttens all renderpasses into a single depth dict.
     """
     if "Shader" in shader_data:
         shader_data = shader_data["Shader"]
     out_dict = {}
 
+    # we lift some information out of the "info" dict that are useful
     out_dict["id"] = shader_data["info"]["id"]
     out_dict["name"] = shader_data["info"]["name"]
     out_dict["author"] = shader_data["info"]["username"]
@@ -63,9 +75,9 @@ def flatten_shader_data(shader_data: dict) -> dict:
     out_dict["tags"] = shader_data["info"]["tags"]
     out_dict["likes"] = shader_data["info"]["likes"]
     out_dict["viewed"] = shader_data["info"]["viewed"]
-    # out_dict["parentid"] = shader_data["info"]["parentid"] # if it's forked (only available in download/scrape) - not in API...
-    out_dict["published"] = shader_data["info"]["published"] # download uses {0: "private?", 3: "Public API"} ...? tbh check
-    out_dict["date"] = shader_data["info"]["date"] #maybe format into a readable format or at least int?
+    out_dict["published"] = shader_data["info"]["published"] # download uses {0: "Private", 1: "Public", 2: "Unlisted", 3: "Public API", 4: "Anonymous"}
+    out_dict["date"] = shader_data["info"]["date"] # maybe format into a readable format or at least int?
+    # this one is added by us wiht the download.py script
     out_dict["time_retrieved"] = shader_data["time_retrieved"]
 
     pass_names = [
@@ -85,10 +97,9 @@ def flatten_shader_data(shader_data: dict) -> dict:
 
         # remove the pass name from the list
         try:
-            pass_names.remove(
-                rp["name"]
-            )  # TODO: test for value error here? ('', 'Buffer @', 'none', 'Buf C', 'Text Lib', 'Buf A', 'Buf B', 'Buf D')
+            pass_names.remove(rp["name"])  
         except ValueError:
+            # TODO: find a solution for some of these unknown names: ('', 'Buffer @', 'none', 'Buf C', 'Text Lib', 'Buf A', 'Buf B', 'Buf D')
             print(f"Pass name not standard: {rp['name']=}, skipping...")
             continue
         out_dict[f"{rp['name'].replace(' ', '_').lower()}_code"] = rp.get("code", "")
@@ -104,11 +115,19 @@ def flatten_shader_data(shader_data: dict) -> dict:
     return out_dict
 
 
-def check_license(code: str) -> str:
+def check_license(code_or_shader) -> str:
     """
     Returns the license mentioned if the first node is a comment.
     if none is found, or no comment, returns "CC-BY-NC-SA-3.0" as the base case.
     """
+    if isinstance(code_or_shader, dict):
+        code = code_or_shader["image_code"]
+    elif isinstance(code_or_shader, str):
+        code = code_or_shader
+    else:
+        raise TypeError(f" function doesn't support {type(code_or_shader)}")
+
+
     tree = PARSER.parse(bytes(code, encoding="utf-8"))
     comment_bytes = b""
     cursor = tree.walk()
@@ -125,12 +144,21 @@ def check_license(code: str) -> str:
     # base case is capitalized for downstream analysis
     return "CC-BY-NC-SA-3.0"
 
-def parse_functions(code:str) -> List[Tuple[int,int,int,int,int]]:
+
+def parse_functions(code_or_shader) -> List[Tuple[int,int,int,int,int]]:
     """
     parses the code using tree-parser-glsl
     returns the **byte-indecies** for before_comment, start header, end header, end docstring, end_function.
     returns a list 5-tupel. If before_comment or docstring aren't found, the indiecies will coinside with the next one.
     """
+    # TODO: dry and maybe have it code_or_tree?
+    if isinstance(code_or_shader, dict):
+        code = code_or_shader["image_code"]
+    elif isinstance(code_or_shader, str):
+        code = code_or_shader
+    else:
+        raise TypeError(f" function doesn't support {type(code_or_shader)}")
+
     tree = PARSER.parse(bytes(code, encoding="utf-8"))
     root_node = tree.root_node
     funcs = []
@@ -164,66 +192,101 @@ def parse_functions(code:str) -> List[Tuple[int,int,int,int,int]]:
     return funcs
 
 
-def try_shader(shader_data: dict, image_code: str) -> str:
+def try_shader(shader_data: dict) -> str:
     """
-    Tests a shader by running it in wgpu-shadertoy. Returns one of the following:
+    Tests a shader by running it in wgpu-shadertoy. Returns one of the following disjunct classes:
     "ok" - shader ran without error
     "incomplete" - not yet fully supported in wgpu-shadertoy
     "error" - wgpu-shadertoy threw and error (is likely still valid on the website)
     "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
+    "timeout" - if after 5 seconds we don't get to error or okay.
     """
+    # TODO: refactor out the use of the evaluate module here. Just subprocess to try/except - no more naga.
+    # should there be an "untested" results if there is an unrelated error with like cache files for example?
     if "Shader" not in shader_data:
         shader_data["Shader"] = shader_data
-    # try:
-    #     # TODO: tjos
-    #     shadermatch = evaluate.load("Vipitis/shadermatch")
-    # except Exception as e:
-    #     print(f"Failed to load shadermatch: {e}")
-    #     return "not-tested"
+    
+    image_code = shader_data["image_code"]
     # code snippet from elsewhere, ref: https://huggingface.co/spaces/Vipitis/shadermatch/blob/main/shadermatch.py#L141-L157
     try:
         shadermatch.validate_shadertoy(
             image_code
         )  # only checks the main image pass, could still crash if common or other passes have issues...
     except Exception as e:
+        print(e)
         if isinstance(e, ValueError):
             print(
                 f"ValueError: {e} for shader {shader_data['Shader']['info']['id']=}, counts as error"
             )
             return "error"
-        if "panicked" in e.message or "timedout" in e.message:
+        if "panicked" in e.message:
             return "panic"
+        elif "timedout" in e.message:
+            return "timeout"
         else:
             return "error"
     try:
-        shader = Shadertoy.from_json(shader_data["Shader"], offscreen=True, shader_type="glsl")
+        #TODO: this doesn't work for flattened variant right now... need to map my custom cols to the original format again?
+        # shader_args = shader_args_from_json(shader_data["Shader"])
+        # if not shader_args["complete"]:
+        #     return "incomplete"
+        shader = Shadertoy(shader_code=image_code, offscreen=True)
         # shader.show() not required I think...
     except Exception as e:
-        return "error"
-    if not shader.complete:
-        return "incomplete"
+        print(e.message)
+        return "error" # could be API error? maybe put untested
     return "ok"
 
+# gloablly map all columns to the function that calculate them. might need to REGISTER more?
+COLUMN_MAP = {"license": check_license, "functions": parse_functions, "test": try_shader}
 
 if __name__ == "__main__":
     args = argument_parser.parse_args()
+    print(f"{args=}")
     input_dir = args.input
     output_dir = args.output
+    columns = [col.strip() for col in args.columns.split(",")] #if col in list(COLUMN_MAP.values()) + ["all"]]
+    print(f"{columns=}")
 
-    for file in tqdm.tqdm(os.listdir(input_dir)):
-        source = "api" #default?
-        if file.startswith("20k"):
-            source = "shaders20k"
-        if file.endswith(".jsonl"):
+
+    if args.mode == "redo":
+        print(f"annotating all .jsonlines files in {input_dir}")
+        for file in tqdm.tqdm(os.listdir(input_dir)):
+            if not file.endswith(".jsonl"):
+                tqdm.tqdm.write(f"Skipping file {file}")
+            source = "api" #default?
+            if file.startswith("20k"): #should we do api_ prefix for the others?
+                source = "shaders20k"
             tqdm.tqdm.write(f"Annotating {file}")
             with jsonlines.open(os.path.join(input_dir, file), "r") as reader:
                 shaders = list(reader)
             annotated_shaders = []
             for shader in tqdm.tqdm(shaders):
-                annotated_shaders.append(annotate_shader(shader,test=args.test, access=source))
+                annotated_shaders.append(annotate_shader(shader, columns=columns, access=source))
+            
             output_path = os.path.join(output_dir, file)
-            # TODO: consider appending/overwriting? needs proper indexing...
             with jsonlines.open(output_path, mode="w") as writer:
                 for shader in annotated_shaders:
                     writer.write(shader)
             tqdm.tqdm.write(f"Annotated {file} to {output_path}")
+
+    elif args.mode == "update":
+        print(f"updating all .jsonlines files in {output_dir}")
+        for file in tqdm.tqdm(os.listdir(output_dir)):
+            if not file.endswith(".jsonl"):
+                tqdm.tqdm.write(f"Skipping file {file}")
+            with jsonlines.open(os.path.join(output_dir, file), "r") as reader:
+                old_annotations = list(reader)
+            new_annotations = []
+            for annotation in old_annotations:
+                new_annotations.append(update_shader(annotation, columns=columns))
+
+            # TODO: DRY - don't repeat yourself?
+            output_path = os.path.join(output_dir, file)
+            with jsonlines.open(output_path, mode="w") as writer:
+                for shader in new_annotations:
+                    writer.write(shader)
+            tqdm.tqdm.write(f"Annotated {file} to {output_path}")
+
+    else:
+        print(f"unrecognized mode {args.mode}, please chose either `update` or `redo`")
