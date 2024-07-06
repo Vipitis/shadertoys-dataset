@@ -1,23 +1,22 @@
-import json
-from argon2 import Type
 import jsonlines
 import os
-import datetime
 import argparse
+from collections.abc import Mapping
+from typing import List, Tuple
+
+
 import tqdm
-import evaluate
 import tree_sitter_glsl as tsglsl
 from tree_sitter import Language, Parser
-from typing import List, Tuple
-from wgpu_shadertoy import Shadertoy
 from licensedcode.detection import detect_licenses
+from zmq import has
 
-from wgpu_shadertoy.api import shader_args_from_json
+from wgpu_shadertoy.api import shader_args_from_json, _download_media_channels
+from wgpu_shadertoy import BufferRenderPass, Shadertoy
 
 GLSL_LANGUAGE = Language(tsglsl.language())
 PARSER = Parser(GLSL_LANGUAGE)
 
-shadermatch = evaluate.load("Vipitis/shadermatch")
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--input", type=str, required=False, default="./data/raw/", help="the path of raw shadertoy api returns .jsonl")
@@ -192,6 +191,61 @@ def parse_functions(code_or_shader) -> List[Tuple[int,int,int,int,int]]:
     return funcs
 
 
+def run_shader(shader_or_code):
+    """
+    Tests a shader by running it in wgpu-shadertoy. Returns one of the following disjunct classes:
+    "ok" - shader ran without error
+    "incomplete" - not yet fully supported in wgpu-shadertoy
+    "error" - wgpu-shadertoy threw and error (is likely still valid on the website)
+    "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
+    "timeout" - if after 5 seconds we don't get to error or okay.
+    """
+    if isinstance(shader_or_code, str):
+        # case 1 we only get the only a string of code
+        shader_args = {"shader_code": shader_or_code}
+
+    elif isinstance(shader_or_code, Mapping):
+        # case 2 we get a dict, always unpack this "Shader" level
+        if "Shader" in shader_or_code:
+            shader_data = shader_or_code["Shader"]
+        else:
+            shader_data = shader_or_code
+        # case 2.a if we get a default "raw" return?
+        if "renderpass" in shader_data:
+            shader_args = shader_args_from_json(shader_data)
+        # case 2.b we get a flattened json
+        elif "image_code" in shader_data: #really lazy check.
+            
+            buffers = {}
+            for buf in "abcd":
+                if shader_data[f"buffer_{buf}_code"]:
+                    buffers[buf] = BufferRenderPass(buf, code=shader_data[f"buffer_{buf}_code"], inputs=_download_media_channels(shader_data[f"buffer_{buf}_inputs"])[0])
+                else:
+                    # because we don't handle empty code for Buffers internally.
+                    buffers[buf] = ""
+
+            shader_args = {
+                "shader_code": shader_data["image_code"],
+                "inputs": _download_media_channels(shader_data["image_inputs"])[0],
+                "common": shader_data["common_code"],
+                "buffers": buffers,
+            }
+        
+    shader_args["shader_type"] = "glsl"
+    try:
+        shader = Shadertoy(**shader_args, offscreen=True)
+        if not shader.complete:
+            return "incomplete"
+        else:
+            return "ok"
+    except Exception as e:
+        if not hasattr(e, "message"):
+            return "error"
+        elif "panicked" in e.message:
+            return "panic"
+        elif "timedout" in e.message:
+            return "timeout"
+        
 def try_shader(shader_data: dict) -> str:
     """
     Tests a shader by running it in wgpu-shadertoy. Returns one of the following disjunct classes:
@@ -238,7 +292,7 @@ def try_shader(shader_data: dict) -> str:
     return "ok"
 
 # gloablly map all columns to the function that calculate them. might need to REGISTER more?
-COLUMN_MAP = {"license": check_license, "functions": parse_functions, "test": try_shader}
+COLUMN_MAP = {"license": check_license, "functions": parse_functions, "test": run_shader}
 
 if __name__ == "__main__":
     args = argument_parser.parse_args()
