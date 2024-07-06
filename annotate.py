@@ -200,6 +200,7 @@ def run_shader(shader_or_code):
     "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
     "timeout" - if after 5 seconds we don't get to error or okay.
     """
+    # return "untested" #placeholder to avoid empty columns for later analysis
     if isinstance(shader_or_code, str):
         # case 1 we only get the only a string of code
         shader_args = {"shader_code": shader_or_code}
@@ -240,11 +241,13 @@ def run_shader(shader_or_code):
             return "ok"
     except Exception as e:
         if not hasattr(e, "message"):
-            return "error"
+            return "error" # here we could have value errors?
         elif "panicked" in e.message:
-            return "panic"
+            return "panic" # this requires us to catch a rust panic via subprocess or something, not implemented yet.
         elif "timedout" in e.message:
-            return "timeout"
+            return "timeout" # unsure on how we can catch this one.
+        else:
+            return "error" # other errors have a .message like wgpu ones.
         
 def try_shader(shader_data: dict) -> str:
     """
@@ -334,7 +337,7 @@ if __name__ == "__main__":
             with jsonlines.open(os.path.join(output_dir, file), "r") as reader:
                 old_annotations = list(reader)
             new_annotations = []
-            for annotation in old_annotations:
+            for annotation in tqdm.tqdm(old_annotations):
                 new_annotations.append(update_shader(annotation, columns=columns))
 
             # TODO: DRY - don't repeat yourself?
