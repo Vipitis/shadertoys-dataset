@@ -199,8 +199,8 @@ def run_shader(shader_or_code):
     "ok" - shader ran without error
     "incomplete" - not yet fully supported in wgpu-shadertoy
     "error" - wgpu-shadertoy threw and error (is likely still valid on the website)
-    "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
-    "timeout" - if after 5 seconds we don't get to error or okay.
+    "timedout" - if after 5 seconds we don't get to error or okay.
+    # not implemented: "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
     """
     # return "untested" #placeholder to avoid empty columns for later analysis
     if isinstance(shader_or_code, str):
@@ -236,6 +236,7 @@ def run_shader(shader_or_code):
         
     shader_args["shader_type"] = "glsl"
     valid = validate_shader(shader_args["shader_code"]) # this overreports errors due to channels.
+    return valid # don't run Shadertoy just yet...
     if valid != "valid":
         return valid
     try:
@@ -248,18 +249,25 @@ def run_shader(shader_or_code):
         return "error" # other errors have a .message like wgpu ones.
         
 
-def validate_shader(image_code: str) -> str: 
+def validate_shader(image_code: str, seconds: int=5) -> str: 
     """
     this function checks if a renderpass code is valid GLSL with naga.
     it's run in subprocess to catch timeouts after 5 seconds.
     NOTICE: this does not include compatibility code for channel inputs. these will overrepot as errors.
     """
     fragment_code = builtin_variables_glsl + image_code + fragment_code_glsl
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".frag", encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".frag", encoding="utf-8") as f, \
+        tempfile.NamedTemporaryFile(suffix=".spv", mode="w+b") as f2, \
+        tempfile.NamedTemporaryFile(suffix=".wgsl", mode="w+b") as f3: 
         f.write(fragment_code)
         f.flush()
+        f2.flush()
+        f3.flush()
         try:
-            subprocess.run(["naga", f.name], check=True, capture_output=True, timeout=5)
+            subprocess.run(["naga", f.name], check=True, capture_output=True, timeout=seconds)
+            # these additional translations help to catch some panics that run through the validation in naga (maybe fixed in 0.20...)
+            subprocess.run(["naga", f.name, f2.name], check=True, capture_output=True, timeout=seconds)
+            subprocess.run(["naga", f.name, f3.name], check=True, capture_output=True, timeout=seconds)
             return "valid"
         except subprocess.SubprocessError as e:
             if isinstance(e, subprocess.TimeoutExpired):
@@ -268,52 +276,6 @@ def validate_shader(image_code: str) -> str:
             #TODO: add a class for panic
             return "error"
         return "valid" #redundant return statement
-
-
-def try_shader(shader_data: dict) -> str:
-    """
-    Tests a shader by running it in wgpu-shadertoy. Returns one of the following disjunct classes:
-    "ok" - shader ran without error
-    "incomplete" - not yet fully supported in wgpu-shadertoy
-    "error" - wgpu-shadertoy threw and error (is likely still valid on the website)
-    "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
-    "timeout" - if after 5 seconds we don't get to error or okay.
-    """
-    # TODO: refactor out the use of the evaluate module here. Just subprocess to try/except - no more naga.
-    # should there be an "untested" results if there is an unrelated error with like cache files for example?
-    if "Shader" not in shader_data:
-        shader_data["Shader"] = shader_data
-    
-    image_code = shader_data["image_code"]
-    # code snippet from elsewhere, ref: https://huggingface.co/spaces/Vipitis/shadermatch/blob/main/shadermatch.py#L141-L157
-    try:
-        shadermatch.validate_shadertoy(
-            image_code
-        )  # only checks the main image pass, could still crash if common or other passes have issues...
-    except Exception as e:
-        print(e)
-        if isinstance(e, ValueError):
-            print(
-                f"ValueError: {e} for shader {shader_data['Shader']['info']['id']=}, counts as error"
-            )
-            return "error"
-        if "panicked" in e.message:
-            return "panic"
-        elif "timedout" in e.message:
-            return "timeout"
-        else:
-            return "error"
-    try:
-        #TODO: this doesn't work for flattened variant right now... need to map my custom cols to the original format again?
-        # shader_args = shader_args_from_json(shader_data["Shader"])
-        # if not shader_args["complete"]:
-        #     return "incomplete"
-        shader = Shadertoy(shader_code=image_code, offscreen=True)
-        # shader.show() not required I think...
-    except Exception as e:
-        print(e.message)
-        return "error" # could be API error? maybe put untested
-    return "ok"
 
 # gloablly map all columns to the function that calculate them. might need to REGISTER more?
 COLUMN_MAP = {"license": check_license, "functions": parse_functions, "test": run_shader}
