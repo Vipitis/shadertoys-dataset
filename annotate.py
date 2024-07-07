@@ -1,17 +1,19 @@
 import jsonlines
 import os
 import argparse
+import tempfile
+import subprocess
 from collections.abc import Mapping
 from typing import List, Tuple
 
-
-import tqdm
 import tree_sitter_glsl as tsglsl
+from tqdm.auto import tqdm
 from tree_sitter import Language, Parser
 from licensedcode.detection import detect_licenses
 from zmq import has
 
 from wgpu_shadertoy.api import shader_args_from_json, _download_media_channels
+from wgpu_shadertoy.passes import builtin_variables_glsl, fragment_code_glsl
 from wgpu_shadertoy import BufferRenderPass, Shadertoy
 
 GLSL_LANGUAGE = Language(tsglsl.language())
@@ -233,6 +235,9 @@ def run_shader(shader_or_code):
             }
         
     shader_args["shader_type"] = "glsl"
+    valid = validate_shader(shader_args["shader_code"]) # this overreports errors due to channels.
+    if valid != "valid":
+        return valid
     try:
         shader = Shadertoy(**shader_args, offscreen=True)
         if not shader.complete:
@@ -240,15 +245,31 @@ def run_shader(shader_or_code):
         else:
             return "ok"
     except Exception as e:
-        if not hasattr(e, "message"):
-            return "error" # here we could have value errors?
-        elif "panicked" in e.message:
-            return "panic" # this requires us to catch a rust panic via subprocess or something, not implemented yet.
-        elif "timedout" in e.message:
-            return "timeout" # unsure on how we can catch this one.
-        else:
-            return "error" # other errors have a .message like wgpu ones.
+        return "error" # other errors have a .message like wgpu ones.
         
+
+def validate_shader(image_code: str) -> str: 
+    """
+    this function checks if a renderpass code is valid GLSL with naga.
+    it's run in subprocess to catch timeouts after 5 seconds.
+    NOTICE: this does not include compatibility code for channel inputs. these will overrepot as errors.
+    """
+    fragment_code = builtin_variables_glsl + image_code + fragment_code_glsl
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".frag", encoding="utf-8") as f:
+        f.write(fragment_code)
+        f.flush()
+        try:
+            subprocess.run(["naga", f.name], check=True, capture_output=True, timeout=5)
+            return "valid"
+        except subprocess.SubprocessError as e:
+            if isinstance(e, subprocess.TimeoutExpired):
+                return "timedout"
+            # return e.stderr.decode("utf-8")
+            #TODO: add a class for panic
+            return "error"
+        return "valid" #redundant return statement
+
+
 def try_shader(shader_data: dict) -> str:
     """
     Tests a shader by running it in wgpu-shadertoy. Returns one of the following disjunct classes:
@@ -308,36 +329,36 @@ if __name__ == "__main__":
 
     if args.mode == "redo":
         print(f"annotating all .jsonlines files in {input_dir}")
-        for file in tqdm.tqdm(os.listdir(input_dir)):
+        for file in tqdm(os.listdir(input_dir)):
             if not file.endswith(".jsonl"):
-                tqdm.tqdm.write(f"Skipping file {file}")
+                tqdm.write(f"Skipping file {file}")
                 continue
             source = "api" #default?
             if file.startswith("20k"): #should we do api_ prefix for the others?
                 source = "shaders20k"
-            tqdm.tqdm.write(f"Annotating {file}")
+            tqdm.write(f"Annotating {file}")
             with jsonlines.open(os.path.join(input_dir, file), "r") as reader:
                 shaders = list(reader)
             annotated_shaders = []
-            for shader in tqdm.tqdm(shaders):
+            for shader in tqdm(shaders):
                 annotated_shaders.append(annotate_shader(shader, columns=columns, access=source))
             
             output_path = os.path.join(output_dir, file)
             with jsonlines.open(output_path, mode="w") as writer:
                 for shader in annotated_shaders:
                     writer.write(shader)
-            tqdm.tqdm.write(f"Annotated {file} to {output_path}")
+            tqdm.write(f"Annotated {file} to {output_path}")
 
     elif args.mode == "update":
         print(f"updating all .jsonlines files in {output_dir}")
-        for file in tqdm.tqdm(os.listdir(output_dir)):
+        for file in tqdm(os.listdir(output_dir)):
             if not file.endswith(".jsonl"):
-                tqdm.tqdm.write(f"Skipping file {file}")
+                tqdm.write(f"Skipping file {file}")
                 continue
             with jsonlines.open(os.path.join(output_dir, file), "r") as reader:
                 old_annotations = list(reader)
             new_annotations = []
-            for annotation in tqdm.tqdm(old_annotations):
+            for annotation in tqdm(old_annotations):
                 new_annotations.append(update_shader(annotation, columns=columns))
 
             # TODO: DRY - don't repeat yourself?
@@ -345,7 +366,7 @@ if __name__ == "__main__":
             with jsonlines.open(output_path, mode="w") as writer:
                 for shader in new_annotations:
                     writer.write(shader)
-            tqdm.tqdm.write(f"Annotated {file} to {output_path}")
+            tqdm.write(f"Annotated {file} to {output_path}")
 
     else:
         print(f"unrecognized mode {args.mode}, please chose either `update` or `redo`")
