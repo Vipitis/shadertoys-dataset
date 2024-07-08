@@ -172,9 +172,9 @@ def parse_functions(code_or_shader) -> List[Tuple[int,int,int,int,int]]:
             if ((comment_line + 1) != child.start_point[0]): # and child.start_point[1] == 0 # and not child.start_point[1] # so we only get whole line comments, nothing inline. but tabs or indentation might be an issue?
                 start_comment = child.start_byte
             comment_line = child.end_point[0]
-        elif child.type == "function_definition":
+        elif child.type == "function_definition" and not child.has_error:
             start_header = child.start_byte
-            if comment_line == -2 and not start_comment: # so we can also get multi line comments at the start (but inline comments?)
+            if ((comment_line + 1) != child.start_point[0]): # so we can also get multi line comments at the start (but inline comments?)
                 start_comment = start_header
             end_function = child.end_byte
             end_header = child.children[-1].children[0].end_byte
