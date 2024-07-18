@@ -236,18 +236,60 @@ def run_shader(shader_or_code):
         
     shader_args["shader_type"] = "glsl"
     valid = validate_shader(shader_args["shader_code"]) # this overreports errors due to channels.
-    return valid # don't run Shadertoy just yet...
+    # return valid # don't run Shadertoy just yet...
     if valid != "valid":
         return valid
-    try:
-        shader = Shadertoy(**shader_args, offscreen=True)
-        if not shader.complete:
-            return "incomplete"
-        else:
-            return "ok"
-    except Exception as e:
-        return "error" # other errors have a .message like wgpu ones.
-        
+    
+    sub_run = run_shader_in_subprocess(shader_args["shader_code"])
+
+    if sub_run == "ok":
+        try:
+            shader = Shadertoy(**shader_args, offscreen=True)
+            if not shader.complete:
+                return "incomplete"
+            else:
+                return "ok"
+        except Exception as e:
+            return "error" # other errors have a .message like wgpu ones.
+    
+    return sub_run
+
+# this is minimal code to try a single pass shader in a subprocess (no inputs)
+file_template = """
+from wgpu_shadertoy import Shadertoy
+
+shader_code = '''{}'''
+
+shader = Shadertoy(shader_code, shader_type="glsl", offscreen=True)
+
+if __name__ == "__main__":
+    shader.show()
+    shader.snapshot(0.0)
+"""
+
+def run_shader_in_subprocess(shader_code, timeout=5):
+    status = "ok" # default case
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
+        f.write(file_template.format(shader_code))
+        f.flush()
+        try:
+            p = subprocess.run(["python", f.name], capture_output=True, timeout=timeout)
+            
+        except subprocess.SubprocessError as e:
+            if isinstance(e, subprocess.TimeoutExpired):
+                status = "timeout"
+            else:
+                status = "error"
+            return status
+
+        if p.stderr != b"":
+            status = "error"
+    
+    # cleanup temp file, delete_on_close was only added in Python 3.12?
+    os.remove(f.name)
+
+    return status
+
 
 def validate_shader(image_code: str, seconds: int=5) -> str: 
     """
