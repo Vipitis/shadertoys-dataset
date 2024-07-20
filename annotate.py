@@ -241,7 +241,7 @@ def run_shader(shader_or_code):
         return valid
     
     sub_run = run_shader_in_subprocess(shader_args["shader_code"])
-
+    return sub_run # this later part seems redundant right now. should speed things up a bit...
     if sub_run == "ok":
         try:
             shader = Shadertoy(**shader_args, offscreen=True)
@@ -280,7 +280,7 @@ def run_shader_in_subprocess(shader_code, timeout=5):
                 status = "timeout"
             else:
                 status = "error"
-            return status
+            return status # early exit here never removes the temp file -.-
 
         if p.stderr != b"":
             status = "error"
