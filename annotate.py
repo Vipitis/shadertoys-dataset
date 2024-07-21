@@ -10,7 +10,6 @@ import tree_sitter_glsl as tsglsl
 from tqdm.auto import tqdm
 from tree_sitter import Language, Parser
 from licensedcode.detection import detect_licenses
-from zmq import has
 
 from wgpu_shadertoy.api import shader_args_from_json, _download_media_channels
 from wgpu_shadertoy.passes import builtin_variables_glsl, fragment_code_glsl
