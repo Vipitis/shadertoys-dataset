@@ -280,14 +280,16 @@ def run_shader_in_subprocess(shader_code, timeout=5):
             else:
                 status = "error"
             return status # early exit here never removes the temp file -.-
-
-        if p.stderr != b"":
-            status = "error"
     
     # cleanup temp file, delete_on_close was only added in Python 3.12?
     os.remove(f.name)
-
+        
+    if status == "ok":
+        if p.returncode != 0:
+            status = "error"
+    
     return status
+
 
 
 def validate_shader(image_code: str, seconds: int=5) -> str: 
