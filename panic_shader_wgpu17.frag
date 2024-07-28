@@ -1,32 +1,28 @@
-from wgpu_shadertoy import Shadertoy
+#version 450 core
 
-# shadertoy source: https://www.shadertoy.com/view/4tGGzd by koiava 
-# this is on API but doesn't run or error. the window shows up and is gone.
-# it gets all the way to create_render_pipeline and reaches the proxy function with PipelineDescriptor or something and then dies. I got to step carefully (enable proxy breakpoint after reaching _finish_renderpass) and look at the exact struct we try.
-# deconstructing the code, from the main function the initScene() function causes the crash. lets dig deeper!
-# inside the initScene() function, it seems to be the createCS() function that is the culprit, lets dig deeper again!
-# this function works on it's own. and returning a mat4 directly still causes the crash. So I will replace any invokations with a dummy mat4 instead. Try to understand what's going on.
-# seems to be this createTriangle() function instead. let's look around there: seems to be the last three parameters that are a problem... manual call tree I guess.
-# now seems to be rayIntersectsTriangle() which has trouble with negative? numbers maybe? figure this out now. can by bypassed by an early return - so we are correct.
-# other intersection functions seem to also be problematic - so I will try to find the pattern in the triangle first.
-# okay, the line seems to be 400 (could be off due to some changes I made): `isect.normal_ =  vec3( 0.0, 0.0, 1.0 );` so lets try and understand that.
-# so just the normal of this currentHit isect which is an out var... need to dig further up again.
-# so seems like the problematic line now is 549(original shadertoy line number) where currentHit gets assigned to hit, another out SurfaceHitInfo. So I guess we dig up now?
-# hit the crazy macro on line 557 ... so trying to deconstruct that now. Might take a while, looks even a bit like lambda calculus.
-# only happens when that macro condition is true and it's updaing... still trying to understand it. If I remove either part of the condition is still works... so the combination of both is problematic.
-# the raySceneIntersection function (which uses the macro) gets called twice, once for direct light and another time for the vec3 Raiance ?function. and the later is the problematic case...
-# okay, so Radiance fails because of the if condition, I had tried with a cheeky return vec3(0.0) - but the compiler just ignores the condition here and didn't really answer my problem.
-# will try to call that function in main next. Looks like the second parameter in Radiance Xi doesn't even get used...
-# now looking into a genRay function... because ray is the only input for Radiance. So maybe I find good and bad inputs there.
-# the ray.dir seems to be problematic.. as low values do work? I think there is a condition in the main function that can explain this tho.
-# with the ray.dir overwritten, putting any kind of early exists into the Radiance function causes hangups, as in infinite loops maybe?
-# we are back in raySceneIntersection. It seems like that the hit.normal_ is the problem, if we overwrite it and exit after the first check we are good. But if we allow one more check it's bad again.
-# is it this fucking forShadowTest var that never gets set??? -no it needs to be set, as the Radiance call otherwise returns black.
-# I now think this crash occurs because some parameter of hit get accesssed but it doesn't exist...
-# naga doesn't spot any issues too :/
+vec4 i_mouse;
+vec4 i_date;
+vec3 i_resolution;
+float i_time;
+vec3 i_channel_resolution[4];
+float i_time_delta;
+int i_frame;
+float i_framerate;
 
+// Shadertoy compatibility, see we can use the same code copied from shadertoy website
 
-image_code = """//glsl
+#define iMouse i_mouse
+#define iDate i_date
+#define iResolution i_resolution
+#define iTime i_time
+#define iChannelResolution i_channel_resolution
+#define iTimeDelta i_time_delta
+#define iFrame i_frame
+#define iFrameRate i_framerate
+
+#define mainImage shader_main
+
+//glsl
 #define PIXEL_SAMPLES 		2			//Increase for higher quality
 #define LIGHT_SAMPLES		2			//Increase for higher quality
 
@@ -942,46 +938,35 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         fragColor = vec4( accumulatedColor,1.0 );
     }
 }
-"""
 
-minimal_code = """//glsl
-mat4 createCS(vec3 p, vec3 z, vec3 x) {
-    z = normalize(z);
-    vec3 y = normalize(cross(z,x));
-    x = cross(y,z);
-    
-    return mat4(	vec4( x, 0.0 ), 
-    			 	vec4( y, 0.0 ),
-    				vec4( z, 0.0 ),
-    				vec4( p, 1.0 ));
+layout(location = 0) in vec2 vert_uv;
+
+struct ShadertoyInput {
+    vec4 si_mouse;
+    vec4 si_date;
+    vec3 si_resolution;
+    float si_time;
+    vec3 si_channel_res[4];
+    float si_time_delta;
+    int si_frame;
+    float si_framerate;
+};
+
+layout(binding = 0) uniform ShadertoyInput input;
+out vec4 FragColor;
+void main(){
+
+    i_mouse = input.si_mouse;
+    i_date = input.si_date;
+    i_resolution = input.si_resolution;
+    i_time = input.si_time;
+    i_channel_resolution = input.si_channel_res;
+    i_time_delta = input.si_time_delta;
+    i_frame = input.si_frame;
+    i_framerate = input.si_framerate;
+    vec2 frag_uv = vec2(vert_uv.x, 1.0 - vert_uv.y);
+    vec2 frag_coord = frag_uv * i_resolution.xy;
+
+    shader_main(FragColor, frag_coord);
+
 }
-
-void mainImage( out vec4 fragColor, in vec2 fragCoord )
-{
-    vec2 uv = fragCoord/iResolution.xy;
-
-    // https://www.khronos.org/opengl/wiki/Data_Type_(GLSL)#Matrix_constructors
-    mat4 m1 = mat4(1.0); //identity 
-    mat4 m2 = mat4(vec4(vec3(0.2),0.1));
-    mat4 m3 = mat4(vec4(0.0, 0.1, 0.2, 0.3),
-                vec4(1.0, 1.1, 1.2, 1.3),
-                vec4(2.0, 2.1, 2.2, 2.3),
-                vec4(3.0, 3.1, 3.2, 3.3));
-
-    mat4 m4 = createCS(vec3(0.0123), vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0));
-                
-    vec3 col = vec3(0.12);
-    col += m4[0].xyz*2.0;
-
-    fragColor = vec4(col,1.0);
-}
-
-"""
-
-
-
-shader = Shadertoy(image_code, shader_type="glsl")
-# shader = Shadertoy(minimal_code, shader_type="glsl")
-
-if __name__ == "__main__":
-    shader.show()
