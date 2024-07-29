@@ -113,7 +113,7 @@ def get_shaders20k(data_dir="./data/raw/"):
                 # shaders.append(shader_data)
 
 
-def get_all_shaders():
+def get_all_shaders() -> list[str]:
     url = "https://www.shadertoy.com/api/v1/shaders"
     response = requests.get(
         url, params={"key": SHADERTOY_KEY, "sort": "newest"}, headers=HEADERS
