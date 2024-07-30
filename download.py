@@ -192,28 +192,34 @@ if __name__ == "__main__":
 
     if args.mode == "full":
         shader_ids = get_all_shaders()
-    if args.ids is not None:
-        if args.ids.endswith(".txt"):
-            shader_ids = read_ids(args.ids)
+    elif args.mode == "append":
+        raise NotImplementedError("Append mode not yet implemented")       
+    elif args.mode == "update":
+        if args.ids is not None:
+            if args.ids.endswith(".txt"):
+                shader_ids = read_ids(args.ids)
+            else:
+                shader_ids = args.ids.split(" ")
+            # overwrite num_shaders here as well?
         else:
-            shader_ids = args.ids.split(" ")
-        # overwrite num_shaders here as well?
-    shader_ids = [extract_id(id) for id in shader_ids]
+            raise ValueError("Update mode requires ids to be provided")
+        shader_ids = [extract_id(id) for id in shader_ids]
 
     if args.num_shaders is not None:
         shader_ids = shader_ids[: args.num_shaders]
     num_ids = len(shader_ids)
-    if num_ids > 1000:
-        raise NotImplementedError("Chunking not yet implemented")
-
-    print(f"Total number of shaders ids: {num_ids}")
+    print(f"number of shaders ids: {num_ids}")
 
     for shader_id in tqdm.tqdm(shader_ids):
-        shader = get_shader(shader_id)
+        try:
+            shader = get_shader(shader_id)
+        except Exception as e:
+            print(f"Failed to download shader {shader_id}: {e}")
+            continue
         # from unix timestamp to year and month
         shader_date = datetime.datetime.fromtimestamp(
             float(shader["Shader"]["info"]["date"])
         ).strftime("%Y-%m")
-        output_path = os.path.join(args.output_dir, f"{shader_date}.jsonl")
+        output_path = os.path.join(args.output_dir, f"api_{shader_date}.jsonl")
         append_shaders(output_path, [shader])
     print(f"Downloaded {num_ids} shaders to {output_path}")
