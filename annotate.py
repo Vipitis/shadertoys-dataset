@@ -272,14 +272,13 @@ def run_shader_in_subprocess(shader_code, timeout=5):
         f.write(file_template.format(shader_code))
         f.flush()
         try:
-            p = subprocess.run(["python", f.name], capture_output=True, timeout=timeout)
+            p = subprocess.run(["python", f.name], capture_output=True, timeout=timeout) # this might not work as expect on Linux ...
             
         except subprocess.SubprocessError as e:
             if isinstance(e, subprocess.TimeoutExpired):
                 status = "timeout"
             else:
                 status = "error"
-            return status # early exit here never removes the temp file -.-
     
     # cleanup temp file, delete_on_close was only added in Python 3.12?
     os.remove(f.name)
