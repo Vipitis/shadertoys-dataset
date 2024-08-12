@@ -6,6 +6,7 @@ import subprocess
 from collections.abc import Mapping
 from typing import List, Tuple
 
+from numpy import isin
 import tree_sitter_glsl as tsglsl
 from tqdm.auto import tqdm
 from tree_sitter import Language, Parser
@@ -14,6 +15,8 @@ from licensedcode.detection import detect_licenses
 from wgpu_shadertoy.api import shader_args_from_json, _download_media_channels
 from wgpu_shadertoy.passes import builtin_variables_glsl, fragment_code_glsl
 from wgpu_shadertoy import BufferRenderPass, Shadertoy
+
+from download import read_ids
 
 GLSL_LANGUAGE = Language(tsglsl.language())
 PARSER = Parser(GLSL_LANGUAGE)
@@ -24,6 +27,7 @@ argument_parser.add_argument("--input", type=str, required=False, default="./dat
 argument_parser.add_argument("--output", type=str, required=False, default="./data/annotated/", help="the path of where to store annotated shaders as .jsonl")
 argument_parser.add_argument("--mode", type=str, default="update", help="mode `update` will load shaders already in the output folder and overwrite specified columns; mode `redo` will overwrite the whole file")
 argument_parser.add_argument("--columns", type=str, required=True, help="comma separated list of columns to annotate: all, license, functions, test; if empty will simply faltten the nested structure") 
+argument_parser.add_argument("--ids", type=str, required=False, default="", help="command seperated list or path to a .txt file of ids to update. Will do all in the output dir if left empty")
 # TODO: is --mode "update" --columns "all" is the same as --mode "redo"?
 
 
@@ -192,7 +196,7 @@ def parse_functions(code_or_shader) -> List[Tuple[int,int,int,int,int]]:
     return funcs
 
 
-def run_shader(shader_or_code):
+def run_shader(shader_or_code, timeouts=10):
     """
     Tests a shader by running it in wgpu-shadertoy. Returns one of the following disjunct classes:
     "ok" - shader ran without error
@@ -234,12 +238,13 @@ def run_shader(shader_or_code):
             }
         
     shader_args["shader_type"] = "glsl"
+    # this is depedant on naga-cliand the specific version usd (usually 0.19.0 but maybe 22.0.0 soon).
     valid = validate_shader(shader_args["shader_code"]) # this overreports errors due to channels.
     # return valid # don't run Shadertoy just yet...
     if valid != "valid":
         return valid
     
-    sub_run = run_shader_in_subprocess(shader_args["shader_code"])
+    sub_run = run_shader_in_subprocess(shader_args["shader_code"], timeout=timeouts)
     return sub_run # this later part seems redundant right now. should speed things up a bit...
     if sub_run == "ok":
         try:
@@ -266,7 +271,7 @@ if __name__ == "__main__":
     shader.snapshot(0.0)
 """
 
-def run_shader_in_subprocess(shader_code, timeout=5):
+def run_shader_in_subprocess(shader_code, timeout=10):
     status = "ok" # default case
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
         f.write(file_template.format(shader_code))
@@ -306,10 +311,11 @@ def validate_shader(image_code: str, seconds: int=5) -> str:
         f2.flush()
         f3.flush()
         try:
-            subprocess.run(["naga", f.name], check=True, capture_output=True, timeout=seconds)
+            subprocess.run(["naga", "--input-kind", "glsl", "--shader-stage", "frag", f.name], check=True, capture_output=True, timeout=seconds)
             # these additional translations help to catch some panics that run through the validation in naga (maybe fixed in 0.20...)
-            subprocess.run(["naga", f.name, f2.name], check=True, capture_output=True, timeout=seconds)
-            subprocess.run(["naga", f.name, f3.name], check=True, capture_output=True, timeout=seconds)
+            # you can now translate to multiple targets at once... (there is also bulk validation oO).
+            subprocess.run(["naga", "--input-kind", "glsl", "--shader-stage", "frag", f.name, f2.name, f3.name], check=True, capture_output=True, timeout=seconds)
+            # subprocess.run(["naga", f.name, f3.name], check=True, capture_output=True, timeout=seconds)
             return "valid"
         except subprocess.SubprocessError as e:
             if isinstance(e, subprocess.TimeoutExpired):
@@ -354,7 +360,15 @@ if __name__ == "__main__":
             tqdm.write(f"Annotated {file} to {output_path}")
 
     elif args.mode == "update":
-        print(f"updating all .jsonlines files in {output_dir}")
+        if args.ids == "":
+            ids = None
+            print(f"updating all .jsonlines files in {output_dir}")
+        elif args.ids.endswith(".txt"):
+            ids = read_ids(args.ids)
+            print(f"updating {len(ids)} shaders in {output_dir}")
+        else:
+            isinstance(args.ids, str)
+            ids = args.ids.split(",")
         for file in tqdm(os.listdir(output_dir)):
             if not file.endswith(".jsonl"):
                 tqdm.write(f"Skipping file {file}")
@@ -363,7 +377,13 @@ if __name__ == "__main__":
                 old_annotations = list(reader)
             new_annotations = []
             for annotation in tqdm(old_annotations):
-                new_annotations.append(update_shader(annotation, columns=columns))
+                # we still run through all of them just to find the one id we want?
+                if ids is None or annotation["id"] in ids:
+                    # ids.remove(annotation["id"]) # be careful to never reach an empty list?
+                    # TODO: use empty list as an early exit?
+                    new_annotations.append(update_shader(annotation, columns=columns))
+                else:
+                    new_annotations.append(annotation)
 
             # TODO: DRY - don't repeat yourself?
             output_path = os.path.join(output_dir, file)

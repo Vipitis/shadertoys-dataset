@@ -41,7 +41,7 @@ If you want to use shaders20k (Shadertoy subset of [shaders21k](https://mbaradad
 * For testing shaders [wgpu-shadertoy](https://github.com/pygfx/shadertoy) is used.
 
 * for validation we rely on [naga](https://crates.io/crates/naga-cli), please make sure the `naga` command works. We currently use version 0.19.0 due to the above dependencies, we hope to update to 0.20 soon as some of the validation failures have since been addressed.
-> `cargo install naga-cli@0.19.0`
+> `cargo install naga-cli@22.0.0`
 
 
 ## Usage
@@ -64,9 +64,11 @@ see `download.py --help` for more options. Or look at the [source](./download.py
 ### Annotate
 ```shell
 $>python annotate.py --mode "redo" --columns "license, functions"
+$>python annotate.py --output "./data/annotated/api/" --mode "update" --columns "test" --ids "./data/ids/v0-3.txt"
 ```
 this flattens the nested renderpasses into a single dict and adds relevant information like licenses, function indicies and test-validation. It seems to only do take a few minutes now.
 alternatively the mode `update` allows to overwrite the columns of already flattened files.
+Optionally add `--ids` with a list of comma separated shaderIDs or path to a file with ids, to only update these.
 
 ### Upload (missing) /prepare
 Filter and 
