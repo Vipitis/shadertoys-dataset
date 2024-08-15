@@ -40,7 +40,7 @@ If you want to use shaders20k (Shadertoy subset of [shaders21k](https://mbaradad
 
 * For testing shaders [wgpu-shadertoy](https://github.com/pygfx/shadertoy) is used.
 
-* for validation we rely on [naga](https://crates.io/crates/naga-cli), please make sure the `naga` command works. We currently use version 0.19.0 due to the above dependencies, we hope to update to 0.20 soon as some of the validation failures have since been addressed.
+* for validation we rely on [naga](https://crates.io/crates/naga-cli), please make sure the `naga` command works. We currently use version 22.0.0
 > `cargo install naga-cli@22.0.0`
 
 
