@@ -365,10 +365,10 @@ if __name__ == "__main__":
             print(f"updating all .jsonlines files in {output_dir}")
         elif args.ids.endswith(".txt"):
             ids = read_ids(args.ids)
-            print(f"updating {len(ids)} shaders in {output_dir}")
         else:
             isinstance(args.ids, str)
             ids = args.ids.split(",")
+        print(f"updating {len(ids)} shaders in {output_dir}")
         for file in tqdm(os.listdir(output_dir)):
             if not file.endswith(".jsonl"):
                 tqdm.write(f"Skipping file {file}")
