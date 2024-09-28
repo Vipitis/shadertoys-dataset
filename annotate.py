@@ -239,10 +239,13 @@ def run_shader(shader_or_code, timeouts=10):
         
     shader_args["shader_type"] = "glsl"
     # this is depedant on naga-cliand the specific version usd (usually 0.19.0 but maybe 22.0.0 soon).
-    valid = validate_shader(shader_args["shader_code"]) # this overreports errors due to channels.
-    # return valid # don't run Shadertoy just yet...
-    if valid != "valid":
-        return valid
+    
+    
+    ## SKIPPING NAGA now!
+    # valid = validate_shader(shader_args["shader_code"]) # this overreports errors due to channels.
+    # # return valid # don't run Shadertoy just yet...
+    # if valid != "valid":
+    #     return valid
     
     sub_run = run_shader_in_subprocess(shader_args["shader_code"], timeout=timeouts)
     return sub_run # this later part seems redundant right now. should speed things up a bit...
@@ -259,6 +262,7 @@ def run_shader(shader_or_code, timeouts=10):
     return sub_run
 
 # this is minimal code to try a single pass shader in a subprocess (no inputs)
+# dual snapshot is required since first one doesn't crash it seems.
 file_template = """
 from wgpu_shadertoy import Shadertoy
 
@@ -267,8 +271,9 @@ shader_code = '''{}'''
 shader = Shadertoy(shader_code, shader_type="glsl", offscreen=True)
 
 if __name__ == "__main__":
-    shader.show()
-    shader.snapshot(0.0)
+    snap1 = shader.snapshot(12.34)
+    snap2 = shader.snapshot(56.78)
+    # shader.show()
 """
 
 def run_shader_in_subprocess(shader_code, timeout=10):
