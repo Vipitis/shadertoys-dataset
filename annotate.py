@@ -6,14 +6,12 @@ import subprocess
 from collections.abc import Mapping
 from typing import List, Tuple
 
-from numpy import isin
 import tree_sitter_glsl as tsglsl
 from tqdm.auto import tqdm
 from tree_sitter import Language, Parser
 from licensedcode.detection import detect_licenses
 
 from wgpu_shadertoy.api import shader_args_from_json, _download_media_channels
-from wgpu_shadertoy.passes import builtin_variables_glsl, fragment_code_glsl
 from wgpu_shadertoy import BufferRenderPass, Shadertoy
 
 from download import read_ids
@@ -238,14 +236,7 @@ def run_shader(shader_or_code, timeouts=10):
             }
         
     shader_args["shader_type"] = "glsl"
-    # this is depedant on naga-cliand the specific version usd (usually 0.19.0 but maybe 22.0.0 soon).
-    
-    
-    ## SKIPPING NAGA now!
-    # valid = validate_shader(shader_args["shader_code"]) # this overreports errors due to channels.
-    # # return valid # don't run Shadertoy just yet...
-    # if valid != "valid":
-    #     return valid
+
     
     sub_run = run_shader_in_subprocess(shader_args["shader_code"], timeout=timeouts)
     return sub_run # this later part seems redundant right now. should speed things up a bit...
@@ -276,7 +267,13 @@ if __name__ == "__main__":
     # shader.show()
 """
 
+# same implementation in the metric, check for inconsistencies (and newer commits): 
+# https://huggingface.co/spaces/Vipitis/shadermatch/blob/c569c78182dc618b36b0883b7d66621481ca2933/shadermatch.py#L302
+# the root cause for this is that some shadercode causes rust panics, which crash the python process too... there is no good solution: https://github.com/pygfx/wgpu-py/pull/603
 def run_shader_in_subprocess(shader_code, timeout=10):
+    """be ver careful with this function, it runs user submitted code, and it can easily be escaped and exploited!"""
+
+
     status = "ok" # default case
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
         f.write(file_template.format(shader_code))
@@ -299,36 +296,6 @@ def run_shader_in_subprocess(shader_code, timeout=10):
     
     return status
 
-
-
-def validate_shader(image_code: str, seconds: int=5) -> str: 
-    """
-    this function checks if a renderpass code is valid GLSL with naga.
-    it's run in subprocess to catch timeouts after 5 seconds.
-    NOTICE: this does not include compatibility code for channel inputs. these will overrepot as errors.
-    """
-    fragment_code = builtin_variables_glsl + image_code + fragment_code_glsl
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".frag", encoding="utf-8") as f, \
-        tempfile.NamedTemporaryFile(suffix=".spv", mode="w+b") as f2, \
-        tempfile.NamedTemporaryFile(suffix=".wgsl", mode="w+b") as f3: 
-        f.write(fragment_code)
-        f.flush()
-        f2.flush()
-        f3.flush()
-        try:
-            subprocess.run(["naga", "--input-kind", "glsl", "--shader-stage", "frag", f.name], check=True, capture_output=True, timeout=seconds)
-            # these additional translations help to catch some panics that run through the validation in naga (maybe fixed in 0.20...)
-            # you can now translate to multiple targets at once... (there is also bulk validation oO).
-            subprocess.run(["naga", "--input-kind", "glsl", "--shader-stage", "frag", f.name, f2.name, f3.name], check=True, capture_output=True, timeout=seconds)
-            # subprocess.run(["naga", f.name, f3.name], check=True, capture_output=True, timeout=seconds)
-            return "valid"
-        except subprocess.SubprocessError as e:
-            if isinstance(e, subprocess.TimeoutExpired):
-                return "timedout"
-            # return e.stderr.decode("utf-8")
-            #TODO: add a class for panic
-            return "error"
-        return "valid" #redundant return statement
 
 # gloablly map all columns to the function that calculate them. might need to REGISTER more?
 COLUMN_MAP = {"license": check_license, "functions": parse_functions, "test": run_shader}

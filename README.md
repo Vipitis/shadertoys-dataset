@@ -38,11 +38,7 @@ If you want to use shaders20k (Shadertoy subset of [shaders21k](https://mbaradad
 
 * For license detection [scancode-toolkit](https://github.com/nexB/scancode-toolkit) is used.
 
-* For testing shaders [wgpu-shadertoy](https://github.com/pygfx/shadertoy) is used.
-
-* for validation we rely on [naga](https://crates.io/crates/naga-cli), please make sure the `naga` command works. We currently use version 22.0.0
-> `cargo install naga-cli@22.0.0`
-
+* For testing shaders [wgpu-shadertoy](https://github.com/pygfx/shadertoy) is used. We rely on the unmerged `wip-multipass` branch for now.
 
 ## Usage
 
@@ -64,7 +60,7 @@ see `download.py --help` for more options. Or look at the [source](./download.py
 ### Annotate
 ```shell
 $>python annotate.py --mode "redo" --columns "license, functions"
-$>python annotate.py --output "./data/annotated/api/" --mode "update" --columns "test" --ids "./data/ids/v0-3.txt"
+$>python annotate.py --output "./data/annotated/api/" --mode "update" --columns "test" --ids "./data/ids/v4_filtered.txt"
 ```
 this flattens the nested renderpasses into a single dict and adds relevant information like licenses, function indicies and test-validation. It seems to only do take a few minutes now.
 alternatively the mode `update` allows to overwrite the columns of already flattened files.
