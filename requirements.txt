@@ -1,5 +1,6 @@
-wgpu
-wgpu-shadertoy
+wgpu==0.18.1
+wgpu-shadertoy @ git+https://github.com/pygfx/shadertoy@wip-multipass
+glfw
 requests
 jsonlines
 scancode-toolkit

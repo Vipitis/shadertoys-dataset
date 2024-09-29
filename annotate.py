@@ -1,29 +1,31 @@
-import json
-from argon2 import Type
 import jsonlines
 import os
-import datetime
 import argparse
-import tqdm
-import evaluate
-import tree_sitter_glsl as tsglsl
-from tree_sitter import Language, Parser
+import tempfile
+import subprocess
+from collections.abc import Mapping
 from typing import List, Tuple
-from wgpu_shadertoy import Shadertoy
+
+import tree_sitter_glsl as tsglsl
+from tqdm.auto import tqdm
+from tree_sitter import Language, Parser
 from licensedcode.detection import detect_licenses
 
-from wgpu_shadertoy.api import shader_args_from_json
+from wgpu_shadertoy.api import shader_args_from_json, _download_media_channels
+from wgpu_shadertoy import BufferRenderPass, Shadertoy
+
+from download import read_ids
 
 GLSL_LANGUAGE = Language(tsglsl.language())
 PARSER = Parser(GLSL_LANGUAGE)
 
-shadermatch = evaluate.load("Vipitis/shadermatch")
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--input", type=str, required=False, default="./data/raw/", help="the path of raw shadertoy api returns .jsonl")
 argument_parser.add_argument("--output", type=str, required=False, default="./data/annotated/", help="the path of where to store annotated shaders as .jsonl")
 argument_parser.add_argument("--mode", type=str, default="update", help="mode `update` will load shaders already in the output folder and overwrite specified columns; mode `redo` will overwrite the whole file")
 argument_parser.add_argument("--columns", type=str, required=True, help="comma separated list of columns to annotate: all, license, functions, test; if empty will simply faltten the nested structure") 
+argument_parser.add_argument("--ids", type=str, required=False, default="", help="command seperated list or path to a .txt file of ids to update. Will do all in the output dir if left empty")
 # TODO: is --mode "update" --columns "all" is the same as --mode "redo"?
 
 
@@ -171,9 +173,9 @@ def parse_functions(code_or_shader) -> List[Tuple[int,int,int,int,int]]:
             if ((comment_line + 1) != child.start_point[0]): # and child.start_point[1] == 0 # and not child.start_point[1] # so we only get whole line comments, nothing inline. but tabs or indentation might be an issue?
                 start_comment = child.start_byte
             comment_line = child.end_point[0]
-        elif child.type == "function_definition":
+        elif child.type == "function_definition" and not child.has_error: #TODO: is this .has_error check causing false negatives?
             start_header = child.start_byte
-            if comment_line == -2 and not start_comment: # so we can also get multi line comments at the start (but inline comments?)
+            if ((comment_line + 1) != child.start_point[0]): # so we can also get multi line comments at the start (but inline comments?)
                 start_comment = start_header
             end_function = child.end_byte
             end_header = child.children[-1].children[0].end_byte
@@ -192,53 +194,111 @@ def parse_functions(code_or_shader) -> List[Tuple[int,int,int,int,int]]:
     return funcs
 
 
-def try_shader(shader_data: dict) -> str:
+def run_shader(shader_or_code, timeouts=10):
     """
     Tests a shader by running it in wgpu-shadertoy. Returns one of the following disjunct classes:
     "ok" - shader ran without error
     "incomplete" - not yet fully supported in wgpu-shadertoy
     "error" - wgpu-shadertoy threw and error (is likely still valid on the website)
-    "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
-    "timeout" - if after 5 seconds we don't get to error or okay.
+    "timedout" - if after 5 seconds we don't get to error or okay.
+    # not implemented: "panic" - worst case scenario. a rust panic in wgpu. This can cause the python process to terminate without recovery.
     """
-    # TODO: refactor out the use of the evaluate module here. Just subprocess to try/except - no more naga.
-    # should there be an "untested" results if there is an unrelated error with like cache files for example?
-    if "Shader" not in shader_data:
-        shader_data["Shader"] = shader_data
-    
-    image_code = shader_data["image_code"]
-    # code snippet from elsewhere, ref: https://huggingface.co/spaces/Vipitis/shadermatch/blob/main/shadermatch.py#L141-L157
-    try:
-        shadermatch.validate_shadertoy(
-            image_code
-        )  # only checks the main image pass, could still crash if common or other passes have issues...
-    except Exception as e:
-        print(e)
-        if isinstance(e, ValueError):
-            print(
-                f"ValueError: {e} for shader {shader_data['Shader']['info']['id']=}, counts as error"
-            )
-            return "error"
-        if "panicked" in e.message:
-            return "panic"
-        elif "timedout" in e.message:
-            return "timeout"
+    # return "untested" #placeholder to avoid empty columns for later analysis
+    if isinstance(shader_or_code, str):
+        # case 1 we only get the only a string of code
+        shader_args = {"shader_code": shader_or_code}
+
+    elif isinstance(shader_or_code, Mapping):
+        # case 2 we get a dict, always unpack this "Shader" level
+        if "Shader" in shader_or_code:
+            shader_data = shader_or_code["Shader"]
         else:
-            return "error"
-    try:
-        #TODO: this doesn't work for flattened variant right now... need to map my custom cols to the original format again?
-        # shader_args = shader_args_from_json(shader_data["Shader"])
-        # if not shader_args["complete"]:
-        #     return "incomplete"
-        shader = Shadertoy(shader_code=image_code, offscreen=True)
-        # shader.show() not required I think...
-    except Exception as e:
-        print(e.message)
-        return "error" # could be API error? maybe put untested
-    return "ok"
+            shader_data = shader_or_code
+        # case 2.a if we get a default "raw" return?
+        if "renderpass" in shader_data:
+            shader_args = shader_args_from_json(shader_data)
+        # case 2.b we get a flattened json
+        elif "image_code" in shader_data: #really lazy check.
+            
+            buffers = {}
+            for buf in "abcd":
+                if shader_data[f"buffer_{buf}_code"]:
+                    buffers[buf] = BufferRenderPass(buf, code=shader_data[f"buffer_{buf}_code"], inputs=_download_media_channels(shader_data[f"buffer_{buf}_inputs"])[0])
+                else:
+                    # because we don't handle empty code for Buffers internally.
+                    buffers[buf] = ""
+
+            shader_args = {
+                "shader_code": shader_data["image_code"],
+                "inputs": _download_media_channels(shader_data["image_inputs"])[0],
+                "common": shader_data["common_code"],
+                "buffers": buffers,
+            }
+        
+    shader_args["shader_type"] = "glsl"
+
+    
+    sub_run = run_shader_in_subprocess(shader_args["shader_code"], timeout=timeouts)
+    return sub_run # this later part seems redundant right now. should speed things up a bit...
+    if sub_run == "ok":
+        try:
+            shader = Shadertoy(**shader_args, offscreen=True)
+            if not shader.complete:
+                return "incomplete"
+            else:
+                return "ok"
+        except Exception as e:
+            return "error" # other errors have a .message like wgpu ones.
+    
+    return sub_run
+
+# this is minimal code to try a single pass shader in a subprocess (no inputs)
+# dual snapshot is required since first one doesn't crash it seems.
+file_template = """
+from wgpu_shadertoy import Shadertoy
+
+shader_code = '''{}'''
+
+shader = Shadertoy(shader_code, shader_type="glsl", offscreen=True)
+
+if __name__ == "__main__":
+    snap1 = shader.snapshot(12.34)
+    snap2 = shader.snapshot(56.78)
+    # shader.show()
+"""
+
+# same implementation in the metric, check for inconsistencies (and newer commits): 
+# https://huggingface.co/spaces/Vipitis/shadermatch/blob/c569c78182dc618b36b0883b7d66621481ca2933/shadermatch.py#L302
+# the root cause for this is that some shadercode causes rust panics, which crash the python process too... there is no good solution: https://github.com/pygfx/wgpu-py/pull/603
+def run_shader_in_subprocess(shader_code, timeout=10):
+    """be ver careful with this function, it runs user submitted code, and it can easily be escaped and exploited!"""
+
+
+    status = "ok" # default case
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
+        f.write(file_template.format(shader_code))
+        f.flush()
+        try:
+            p = subprocess.run(["python", f.name], capture_output=True, timeout=timeout) # this might not work as expect on Linux ...
+            
+        except subprocess.SubprocessError as e:
+            if isinstance(e, subprocess.TimeoutExpired):
+                status = "timeout"
+            else:
+                status = "error"
+    
+    # cleanup temp file, delete_on_close was only added in Python 3.12?
+    os.remove(f.name)
+        
+    if status == "ok":
+        if p.returncode != 0:
+            status = "error"
+    
+    return status
+
 
 # gloablly map all columns to the function that calculate them. might need to REGISTER more?
-COLUMN_MAP = {"license": check_license, "functions": parse_functions, "test": try_shader}
+COLUMN_MAP = {"license": check_license, "functions": parse_functions, "test": run_shader}
 
 if __name__ == "__main__":
     args = argument_parser.parse_args()
@@ -251,44 +311,58 @@ if __name__ == "__main__":
 
     if args.mode == "redo":
         print(f"annotating all .jsonlines files in {input_dir}")
-        for file in tqdm.tqdm(os.listdir(input_dir)):
+        for file in tqdm(os.listdir(input_dir)):
             if not file.endswith(".jsonl"):
-                tqdm.tqdm.write(f"Skipping file {file}")
+                tqdm.write(f"Skipping file {file}")
                 continue
             source = "api" #default?
             if file.startswith("20k"): #should we do api_ prefix for the others?
                 source = "shaders20k"
-            tqdm.tqdm.write(f"Annotating {file}")
+            tqdm.write(f"Annotating {file}")
             with jsonlines.open(os.path.join(input_dir, file), "r") as reader:
                 shaders = list(reader)
             annotated_shaders = []
-            for shader in tqdm.tqdm(shaders):
+            for shader in tqdm(shaders):
                 annotated_shaders.append(annotate_shader(shader, columns=columns, access=source))
             
             output_path = os.path.join(output_dir, file)
             with jsonlines.open(output_path, mode="w") as writer:
                 for shader in annotated_shaders:
                     writer.write(shader)
-            tqdm.tqdm.write(f"Annotated {file} to {output_path}")
+            tqdm.write(f"Annotated {file} to {output_path}")
 
     elif args.mode == "update":
-        print(f"updating all .jsonlines files in {output_dir}")
-        for file in tqdm.tqdm(os.listdir(output_dir)):
+        if args.ids == "":
+            ids = None
+            print(f"updating all .jsonlines files in {output_dir}")
+        elif args.ids.endswith(".txt"):
+            ids = read_ids(args.ids)
+        else:
+            isinstance(args.ids, str)
+            ids = args.ids.split(",")
+        print(f"updating {len(ids)} shaders in {output_dir}")
+        for file in tqdm(os.listdir(output_dir)):
             if not file.endswith(".jsonl"):
-                tqdm.tqdm.write(f"Skipping file {file}")
+                tqdm.write(f"Skipping file {file}")
                 continue
             with jsonlines.open(os.path.join(output_dir, file), "r") as reader:
                 old_annotations = list(reader)
             new_annotations = []
-            for annotation in old_annotations:
-                new_annotations.append(update_shader(annotation, columns=columns))
+            for annotation in tqdm(old_annotations):
+                # we still run through all of them just to find the one id we want?
+                if ids is None or annotation["id"] in ids:
+                    # ids.remove(annotation["id"]) # be careful to never reach an empty list?
+                    # TODO: use empty list as an early exit?
+                    new_annotations.append(update_shader(annotation, columns=columns))
+                else:
+                    new_annotations.append(annotation)
 
             # TODO: DRY - don't repeat yourself?
             output_path = os.path.join(output_dir, file)
             with jsonlines.open(output_path, mode="w") as writer:
                 for shader in new_annotations:
                     writer.write(shader)
-            tqdm.tqdm.write(f"Annotated {file} to {output_path}")
+            tqdm.write(f"Annotated {file} to {output_path}")
 
     else:
         print(f"unrecognized mode {args.mode}, please chose either `update` or `redo`")

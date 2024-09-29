@@ -62,7 +62,7 @@ def scrape_to_api(json_data: dict) -> dict:
             inp["src"] = inp.pop("filepath")
             inp["ctype"] = inp.pop("type")
 
-    
+    # TODO: that seems be be incorrect, download gives these. scrape and API gives numbers -.-
     shader_data["Shader"]["info"]["published"] = privacy_keys.get(shader_data["Shader"]["info"]["published"], "Unknown")
 
     return shader_data
