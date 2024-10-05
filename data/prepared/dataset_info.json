@@ -1,0 +1,77 @@
+{
+  "citation": "",
+  "description": "",
+  "features": {
+    "id": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "author": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "date": {
+      "dtype": "timestamp[ns]",
+      "_type": "Value"
+    },
+    "image_code": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "license": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "func_bytes": {
+      "feature": {
+        "dtype": "int64",
+        "_type": "Value"
+      },
+      "_type": "Sequence"
+    },
+    "functions": {
+      "feature": {
+        "feature": {
+          "dtype": "int64",
+          "_type": "Value"
+        },
+        "_type": "Sequence"
+      },
+      "_type": "Sequence"
+    },
+    "comment": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "header": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "docstring": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "body": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "model_inp": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "needed": {
+      "dtype": "bool",
+      "_type": "Value"
+    },
+    "function": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "function_frequency": {
+      "dtype": "int64",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": ""
+}

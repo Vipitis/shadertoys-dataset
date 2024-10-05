@@ -248,6 +248,26 @@ def filter_functions(dataframe: pd.DataFrame, filters=FUNCTION_FILTERS, **kwargs
     return dataframe
 
 
+# -------------------------
+# DATASET PREPARATION
+# -------------------------
+
+def prepare_repo_folder(ds: datasets.Dataset, output_dir: os.PathLike) -> None:
+    """
+    prepare the dataset to be saved to a folder.
+    """
+
+    ds.save_to_disk(output_dir) #this writes the arrow file? I am not sure this is what we want.
+
+    # TODO: write a README.md as dataset card with deps and settings.
+    dataset_card = f"""
+    # Shadereval dataset created on {pd.Timestamp.now()}
+    """
+    with open(os.path.join(output_dir, "README.md"), "w") as f:
+        f.write(dataset_card)
+
+
+
 if __name__ == "__main__":
     args = argument_parser.parse_args()
 
@@ -274,7 +294,7 @@ if __name__ == "__main__":
     filtered_funcs["function_frequency"] = func_df["function"].value_counts()[filtered_funcs["function"]].values
     clean_func_df = filtered_funcs.drop(columns=["function", "docstring", "needed"])
     # prepare the Dataset?
-    initial_df = datasets.Dataset.from_pandas(filtered_funcs)
+    initial_df = datasets.Dataset.from_pandas(filtered_funcs, split="test")
     clean_df = initial_df.remove_columns(['__index_level_0__'])
     print(f"datas set with {len(clean_df)} functions, and columns: {clean_df.column_names}")
-
+    prepare_repo_folder(clean_df, args.output)
