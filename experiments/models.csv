@@ -20,4 +20,4 @@ CodeLlama-7b-hf,meta-llama,7,CodeLlama,yes,0,unknown,cll7
 CodeLlama-13b-hf,meta-llama,13,CodeLlama,yes,0,unknown,cl13
 Llama-3.1-8B,meta-llama,8,llama3.1,no,10,unknown,ll31
 Yi-Coder-1.5B,01-ai,1.5,Yi-Coder,no,52,no,yic1
-Yi-Coder-9B,01-ai,9,Yi-Coder,no,52,no
+Yi-Coder-9B,01-ai,9,Yi-Coder,no,52,no,yic9
