@@ -66,9 +66,13 @@ this flattens the nested renderpasses into a single dict and adds relevant infor
 alternatively the mode `update` allows to overwrite the columns of already flattened files.
 Optionally add `--ids` with a list of comma separated shaderIDs or path to a file with ids, to only update these.
 
-### Upload (missing) /prepare
-Filter and 
-scripts to build train/test split and upload them to Huggingface aren't written yet.
+### Filter
+```shell
+$>python filter.py --input "./data/annotated/." --output "./data/prepared/" --filters "all"
+```
+This script will use the annoated data and apply a series of filters. Filters are specified in [filters.py](./filters.py). The `all` filter will apply all filters.
+It outputs a HF dataset repo into the specified output directory... allowing you to use it as is or upload to HF. The README.md will contain all kinds of interformation of the filters applied and dependencies used.
+
 
 
 ## License note
