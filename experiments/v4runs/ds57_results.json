@@ -489,7 +489,7 @@
     "n_samples": 1,
     "eos": "<|endoftext|>",
     "seed": 0,
-    "model": "deepseek-ai/deepseek-coder-1.3b-base",
+    "model": "deepseek-ai/deepseek-coder-5.7bmqa-base",
     "modeltype": "causal",
     "peft_model": null,
     "revision": null,
