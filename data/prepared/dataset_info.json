@@ -47,10 +47,6 @@
       "dtype": "string",
       "_type": "Value"
     },
-    "docstring": {
-      "dtype": "string",
-      "_type": "Value"
-    },
     "body": {
       "dtype": "string",
       "_type": "Value"
@@ -59,15 +55,11 @@
       "dtype": "string",
       "_type": "Value"
     },
-    "needed": {
-      "dtype": "bool",
-      "_type": "Value"
-    },
-    "function": {
-      "dtype": "string",
-      "_type": "Value"
-    },
     "function_frequency": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "header_frequency": {
       "dtype": "int64",
       "_type": "Value"
     }

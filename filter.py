@@ -2,6 +2,7 @@ import datasets
 import jsonlines
 import json
 import os
+import glob
 import pandas as pd
 import requests
 import argparse
@@ -14,20 +15,20 @@ from annotate import run_shader
 tqdm.pandas()
 
 argument_parser = argparse.ArgumentParser()
-argument_parser.add_argument("--input", type=str, default="./data/annotated/.", help="Directory of annotated .jsonlines files. Defaults to ./data/annotated")
-argument_parser.add_argument("--output", type=str, default="./data/prepared/", help="Directory to save the prepared dataset to. Defaults to ./data/prepared")
+argument_parser.add_argument("--input", type=str, default="./data/annotated/", help="Directory of annotated .jsonlines files. Also looks one subdirectory deeper. Defaults to ./data/annotated/")
+argument_parser.add_argument("--output", type=str, default="./data/prepared/", help="Directory to save the prepared dataset to. Defaults to ./data/prepared/")
 argument_parser.add_argument("--filters", type=str, default="all", help="Which filters to apply. Defaults to 'all'.") #TODO: negative or positive list?
 
 
 
 def load_data(data_dir: os.PathLike) -> pd.DataFrame:
     lines = []
-    # TODO: can we use a .glob here too? what about too many levels? (like out /overlap)?
-    for file in os.listdir(data_dir):
-        if file.endswith(".jsonl"):
-            with jsonlines.open(os.path.join(data_dir, file)) as reader:
-                for obj in reader:
-                    lines.append(obj)
+    top_files = glob.glob(data_dir + "*.jsonl")
+    sub_files = glob.glob(data_dir + "*/*.jsonl")
+    for file in top_files + sub_files:
+        with jsonlines.open(file) as reader:
+            for obj in reader:
+                lines.append(obj)
 
     out_df = pd.DataFrame(lines)
     out_df["date"] = pd.to_datetime(out_df["date"].astype(int), unit="s")
@@ -47,7 +48,7 @@ def filter_licenses(dataframe: pd.DataFrame, keep_base=False, **kwargs) -> pd.Da
     only keep permissive licenses.
     """
     permissive_list = requests.get("https://huggingface.co/datasets/bigcode-data/license_list/resolve/main/permissive_licenses.txt").content.decode("utf-8").split()
-    permissive_list = [l.lower() for l in permissive_list]
+    permissive_list = [license_key.lower() for license_key in permissive_list]
     #TODO: figure out cases with AND and OR in the detection.
     if keep_base:
         permissive_list.append("CC-BY-NC-SA-3.0")
@@ -281,6 +282,7 @@ if __name__ == "__main__":
     filtered_programs = filter_programs(loaded_data)
     print(f"filtered down to {len(filtered_programs)} shader programs")
 
+    all_funcs = expand_functions(loaded_data)
     func_df = expand_functions(filtered_programs)
     print(f"expanded to {len(func_df)} functions")
 
@@ -289,12 +291,14 @@ if __name__ == "__main__":
 
 
     # add extra columns?
-    func_df["function"] = func_df["header"] + func_df["body"]
+    all_funcs["function"] = all_funcs["header"] + all_funcs["body"]
     filtered_funcs["function"] = filtered_funcs["header"] + filtered_funcs["body"]
-    filtered_funcs["function_frequency"] = func_df["function"].value_counts()[filtered_funcs["function"]].values
+    filtered_funcs["function_frequency"] = all_funcs["function"].value_counts()[filtered_funcs["function"]].values
+    filtered_funcs["header_frequency"] = all_funcs["header"].value_counts()[filtered_funcs["header"]].values
     clean_func_df = filtered_funcs.drop(columns=["function", "docstring", "needed"])
     # prepare the Dataset?
-    initial_df = datasets.Dataset.from_pandas(filtered_funcs, split="test")
+    initial_df = datasets.Dataset.from_pandas(clean_func_df, split="test")
     clean_df = initial_df.remove_columns(['__index_level_0__'])
+    print(clean_df)
     print(f"datas set with {len(clean_df)} functions, and columns: {clean_df.column_names}")
     prepare_repo_folder(clean_df, args.output)
