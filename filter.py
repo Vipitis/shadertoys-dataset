@@ -291,6 +291,7 @@ if __name__ == "__main__":
 
 
     # add extra columns?
+    # TODO: this is missing the "docstring" part.
     all_funcs["function"] = all_funcs["header"] + all_funcs["body"]
     filtered_funcs["function"] = filtered_funcs["header"] + filtered_funcs["body"]
     filtered_funcs["function_frequency"] = all_funcs["function"].value_counts()[filtered_funcs["function"]].values
