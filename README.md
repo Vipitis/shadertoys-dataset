@@ -2,7 +2,7 @@
 
 This repository contains the code to download, build and update the Shadertoys dataset.
 The dataset is made up from fragment shader programs published on [Shadertoy](https://www.shadertoy.com/) and annotated with additional metadata for downstream filtering.
-Datasets are hosted on [Huggingface](https://huggingface.co/datasets/Vipitis/Shadertoys), (no longer public). (maybe we name it Shadertoys-2 to avoid overwriting anything)
+Evaluation dataset is hosted on [Huggingface](https://huggingface.co/datasets/Vipitis/Shadereval-inputs)
 
 The main use case for this dataset is various evaluation benchmarks for (code-) language models.
 
@@ -71,7 +71,7 @@ Optionally add `--ids` with a list of comma separated shaderIDs or path to a fil
 $>python filter.py --input "./data/annotated/." --output "./data/prepared/" --filters "all"
 ```
 This script will use the annoated data and apply a series of filters. Filters are specified in [filters.py](./filters.py). The `all` filter will apply all filters.
-It outputs a Arrow repo into the specified output directory... allowing it to loaded via `datasets.from_disk("../dir/")`. (The README.md will contain all kinds of interformation of the filters applied and dependencies used. TBD: likely not).
+It outputs a Arrow repo into the specified output directory... allowing it to loaded via `datasets.from_disk("../dir/")`.
 
 
 
