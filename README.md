@@ -66,10 +66,14 @@ this flattens the nested renderpasses into a single dict and adds relevant infor
 alternatively the mode `update` allows to overwrite the columns of already flattened files.
 Optionally add `--ids` with a list of comma separated shaderIDs or path to a file with ids, to only update these.
 
-### Upload (missing) /prepare
-Filter and 
-scripts to build train/test split and upload them to Huggingface aren't written yet.
+### Filter
+```shell
+$>python filter.py --input "./data/annotated/." --output "./data/prepared/" --filters "all"
+```
+This script will use the annoated data and apply a series of filters. Filters are specified in [filters.py](./filters.py). The `all` filter will apply all filters.
+It outputs a Arrow repo into the specified output directory... allowing it to loaded via `datasets.from_disk("../dir/")`. (The README.md will contain all kinds of interformation of the filters applied and dependencies used. TBD: likely not).
+
 
 
 ## License note
-The contents of this repository (builder scripts, metadata) are distributed under the [Apache 2.0 license](./LICENSE). However the contents of the dataset itself are under their respective license. We do our best to annotate licenses to allow for filtering. Please see the field `license` in the dataset. Some metadata (including licenses) might be out of date, therefore we recommend checking the source
+The contents of this repository (builder scripts, metadata) are distributed under the [Apache 2.0 license](./LICENSE). However the contents of the dataset itself are under their respective license. We do our best to annotate licenses to allow for filtering. Please see the field `license` in the dataset as well as the top of all `image_code` for details. Some metadata (including licenses) might be out of date, therefore we recommend checking the source
