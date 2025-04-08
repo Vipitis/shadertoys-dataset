@@ -8,7 +8,7 @@ The main use case for this dataset is various evaluation benchmarks for (code-) 
 
 This project is not affiliated with Shadertoy. It makes use of the Shadertoy.com API.
 
-## To-Dos
+<!-- ## To-Dos
 This project is still in progress, all datasets currently published will see a major refactor.
 - [ ] pin and branch/archive Return Completion (shadereval-1) test set
 - [ ] dynamically split train/test based on shaderID hash (might not do a train split)
@@ -17,13 +17,8 @@ This project is still in progress, all datasets currently published will see a m
 - [~] redo structure
 - [~] add thumbnails (text2img?)
 - [x] improved license detecting and tagging using `scan-code` 
-- [ ] **potentially** webscraping and tagging sources/unlisted? -> current RFC: https://github.com/pygfx/shadertoy/pull/27
+- [ ] **potentially** webscraping and tagging sources/unlisted? -> current RFC: https://github.com/pygfx/shadertoy/pull/27 -->
 
-
-## Related work
-* [shaders21k](https://mbaradad.github.io/shaders21k/) also sources shader programs from Shadertoy.com, however it provides rendered frames for visual representation learning. It is available as a alreanative to downloading from the API.
-* [The-Stack](https://huggingface.co/datasets/bigcode/the-stack) has a `GLSL` subset. This data is sourced from GitHub.
-* [The-Stack-v2](https://huggingface.co/datasets/bigcode/the-stack-v2) sources data from a larger archive. 
 
 ## Requirements
 ### Setup
@@ -77,3 +72,13 @@ It outputs a Arrow repo into the specified output directory... allowing it to lo
 
 ## License note
 The contents of this repository (builder scripts, metadata) are distributed under the [Apache 2.0 license](./LICENSE). However the contents of the dataset itself are under their respective license. We do our best to annotate licenses to allow for filtering. Please see the field `license` in the dataset as well as the top of all `image_code` for details. Some metadata (including licenses) might be out of date, therefore we recommend checking the source
+
+
+## Citation
+The work has been accepted at LLM4Code 2025 and will be presented [May 3th](https://conf.researchr.org/details/icse-2025/llm4code-2025-papers/13/Evaluating-Language-Models-for-Computer-Graphics-Code-Completion). Full citation to follow.
+
+
+## Related work
+* [shaders21k](https://mbaradad.github.io/shaders21k/) also sources shader programs from Shadertoy.com, however it provides rendered frames for visual representation learning. It is available as a alreanative to downloading from the API.
+* [The-Stack](https://huggingface.co/datasets/bigcode/the-stack) has a `GLSL` subset. This data is sourced from GitHub.
+* [The-Stack-v2](https://huggingface.co/datasets/bigcode/the-stack-v2) sources data from a larger archive. 
