@@ -75,8 +75,21 @@ The contents of this repository (builder scripts, metadata) are distributed unde
 
 
 ## Citation
-The work has been accepted at LLM4Code 2025 and will be presented [May 3th](https://conf.researchr.org/details/icse-2025/llm4code-2025-papers/13/Evaluating-Language-Models-for-Computer-Graphics-Code-Completion). Full citation to follow.
-
+When using the dataset, benchmark or results, please consider citing as the following:
+```bibtex
+@INPROCEEDINGS{11028297,
+    author={Kels, Jan and Dahou, Abdelhalim Hafedh and Mathiak, Brigitte},
+    booktitle={2025 IEEE/ACM International Workshop on Large Language Models for Code (LLM4Code)}, 
+    title={Evaluating Language Models for Computer Graphics Code Completion}, 
+    year={2025},
+    volume={},
+    number={},
+    pages={96-103},
+    doi={10.1109/LLM4Code66737.2025.00017},
+    url={https://doi.org/10.1109/LLM4Code66737.2025.00017}
+}
+```
+A recording of the presentation can be found on the [conference website](https://conf.researchr.org/details/icse-2025/llm4code-2025-papers/13/Evaluating-Language-Models-for-Computer-Graphics-Code-Completion).
 
 ## Related work
 * [shaders21k](https://mbaradad.github.io/shaders21k/) also sources shader programs from Shadertoy.com, however it provides rendered frames for visual representation learning. It is available as a alreanative to downloading from the API.
